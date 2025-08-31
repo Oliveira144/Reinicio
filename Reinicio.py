@@ -1,62 +1,65 @@
-    import streamlit as st
+import streamlit as st
 
 # -----------------------------
 # Motor de Análise Simples
 # -----------------------------
-def analyze_history(seq):
-    if not seq:
-        return {"nivel": 0, "prob": {"🔴":0, "🔵":0, "🟡":0}, "sugestao": "Aguardando entradas..."}
+def analyze_history(history):
+    if not history:
+        return {
+            "nivel": 0,
+            "prob": {"🔴": 0, "🔵": 0, "🟡": 0},
+            "sugestao": "Aguardando resultados..."
+        }
 
-    last = seq[-1]
-    count = 1
-    for i in range(len(seq)-2, -1, -1):
-        if seq[i] == last:
-            count += 1
+    last = history[-1]
+    streak = 1
+    for i in range(len(history) - 2, -1, -1):
+        if history[i] == last:
+            streak += 1
         else:
             break
 
-    probs = {"🔴":33.3, "🔵":33.3, "🟡":33.3}
+    probs = {"🔴": 33.3, "🔵": 33.3, "🟡": 33.3}
     nivel = 1
-    sugestao = "Sem padrão claro ainda."
+    sugestao = "Nenhum padrão detectado."
 
-    if count >= 3:
+    # Heurísticas simples
+    if streak >= 3:
         nivel = 3
         next_options = ["🔴", "🔵"]
         next_options.remove(last)
         probs[next_options[0]] = 60
         probs[last] = 30
         probs["🟡"] = 10
-        sugestao = f"Possível quebra da sequência de {count} {last}. Sugestão: {next_options[0]}"
-
-    elif len(seq) >= 4 and seq[-4:] in (["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]):
+        sugestao = f"Possível quebra do streak de {streak} {last}. Sugestão: {next_options[0]}"
+    elif len(history) >= 4 and history[-4:] in (["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]):
         nivel = 4
-        next_options = ["🔴","🔵"]
+        next_options = ["🔴", "🔵"]
         next_options.remove(last)
         probs[last] = 20
         probs[next_options[0]] = 70
         probs["🟡"] = 10
         sugestao = f"Alternância detectada. Sugestão: {next_options[0]}"
-
     elif last == "🟡":
         nivel = 2
         probs["🟡"] = 5
         probs["🔴"] = 47.5
         probs["🔵"] = 47.5
         sugestao = "Reset detectado. Apostar em 🔴 ou 🔵."
-
     else:
         nivel = 1
-        sugestao = "Jogo equilibrado, sem manipulação clara."
+        sugestao = "Jogo equilibrado."
 
-    return {"nivel":nivel, "prob":probs, "sugestao":sugestao}
+    return {"nivel": nivel, "prob": probs, "sugestao": sugestao}
 
 # -----------------------------
 # Interface Streamlit
 # -----------------------------
 st.set_page_config(page_title="Football Studio Analyzer", layout="centered")
 st.title("🎲 Football Studio Manipulation Analyzer")
-st.write("Insira os resultados e veja a análise da IA.")
+st.write("Insira os resultados e veja a análise preditiva da IA.")
 
+# Histórico de resultados
 if "history" not in st.session_state:
     st.session_state.history = []
 
@@ -72,7 +75,7 @@ with col3:
     if st.button("🟡 Empate"):
         st.session_state.history.append("🟡")
 
-# Histórico
+# Exibir histórico
 st.subheader("📜 Histórico")
 if st.session_state.history:
     max_per_line = 9
@@ -85,14 +88,14 @@ else:
 st.subheader("🤖 Análise da IA")
 analysis = analyze_history(st.session_state.history)
 st.write(f"**Nível de manipulação:** {analysis['nivel']}")
-st.write("**Probabilidades próximas:**")
+st.write("**Probabilidades:**")
 col1, col2, col3 = st.columns(3)
 col1.metric("🔴", f"{analysis['prob']['🔴']}%")
 col2.metric("🔵", f"{analysis['prob']['🔵']}%")
 col3.metric("🟡", f"{analysis['prob']['🟡']}%")
 st.write(f"**Sugestão:** {analysis['sugestao']}")
 
-# Reset
+# Botão reset
 if st.button("🔄 Resetar Histórico"):
     st.session_state.history = []
     st.success("Histórico limpo!")
