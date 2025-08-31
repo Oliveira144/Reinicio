@@ -108,13 +108,14 @@ with col3:
     if st.button("🟡 Empate"):
         st.session_state.history.append("🟡")
 
-# Histórico da esquerda para direita
-st.subheader("📜 Histórico (esquerda → direita)")
+# Histórico da esquerda para direita, mais recente à esquerda
+st.subheader("📜 Histórico (mais recente → mais antigo)")
 if st.session_state.history:
     max_per_line = 9
+    reversed_history = list(reversed(st.session_state.history))  # inverter para mostrar mais recente à esquerda
     lines=[]
     current_line=[]
-    for idx,res in enumerate(st.session_state.history):
+    for idx,res in enumerate(reversed_history):
         current_line.append(res)
         if (idx+1)%max_per_line==0:
             lines.append(current_line)
