@@ -1,108 +1,155 @@
 import streamlit as st
-from collections import Counter
 
 # ==============================
-# Função de análise avançada
+# Funções para detectar cada padrão
 # ==============================
-def analyze_advanced(history):
+def check_streak(h, color=None, length=2):
+    if len(h) >= length:
+        streak = h[-length:]
+        if color:
+            if all(c == color for c in streak):
+                return True, "Alternar"
+        else:
+            if len(set(streak)) == 1 and streak[0] != "🟡":
+                return True, "Alternar"
+    return False, None
+
+def check_alternation(h, size):
+    if len(h) >= size*2:
+        first = h[-2*size:-size]
+        second = h[-size:]
+        if first == second and len(set(first)) > 1:
+            return True, "Repetir sequência"
+    return False, None
+
+def check_repeat(h, size):
+    if len(h) >= size*2:
+        if h[-2*size:-size] == h[-size:]:
+            return True, "Repetir padrão"
+    return False, None
+
+def check_cycle_inverted(h, size=3):
+    if len(h) >= size*2:
+        if h[-2*size:-size] == list(reversed(h[-size:])):
+            return True, "Repetir ciclo invertido"
+    return False, None
+
+def check_cycle_repeated(h, size=3):
+    if len(h) >= size*2:
+        if h[-2*size:-size] == h[-size:]:
+            return True, "Repetir ciclo"
+    return False, None
+
+def check_draw(h):
+    if len(h) >= 1 and h[-1] == "🟡":
+        return True, "Reiniciar padrão"
+    if len(h) >=2 and h[-1]=="🟡" and h[-2]!="🟡":
+        return True, "Reiniciar streak"
+    if len(h) >=3 and h[-2]=="🟡":
+        return True, "Reiniciar alternância"
+    return False, None
+
+# ==============================
+# Função principal de análise
+# ==============================
+def analyze_patterns(history):
     if not history:
-        return [], None, {"🔴":33.3,"🔵":33.3,"🟡":33.3}
+        return [], "Aguardar"
 
-    # Considerar apenas os últimos 18 resultados
-    h = history[-18:]
-
+    h = history[-18:]  # últimos 18 resultados
     patterns_detected = []
-    prob = {"🔴":0,"🔵":0,"🟡":0}
+    next_entries = []
 
-    # ===== Função de camada =====
-    def layer_analysis(seq, weight):
-        layer_prob = {"🔴":0,"🔵":0,"🟡":0}
-        l = len(seq)
+    # 1. Streak vermelho ≥2
+    detected, suggestion = check_streak(h, "🔴", 2)
+    if detected:
+        patterns_detected.append("Streak 🔴 ≥2")
+        next_entries.append(suggestion)
 
-        # --- Streaks ---
-        i = l-1
-        while i>=0:
-            color = seq[i]
-            if color=="🟡":
-                i-=1
-                continue
-            streak = 1
-            j = i-1
-            while j>=0 and seq[j]==color:
-                streak+=1
-                j-=1
-            if streak>=2:
-                patterns_detected.append(f"Streak {color} ≥{streak} (camada {weight})")
-                layer_prob[color] += streak*5*weight
-            i = j
+    # 2. Streak azul ≥2
+    detected, suggestion = check_streak(h, "🔵", 2)
+    if detected:
+        patterns_detected.append("Streak 🔵 ≥2")
+        next_entries.append(suggestion)
 
-        # --- Alternâncias simples ---
-        if l>=4:
-            for start in range(l-3):
-                sub = seq[start:start+4]
-                if sub in [["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]]:
-                    patterns_detected.append(f"Alternância 4 cores (camada {weight})")
-                    next_color = sub[-2]
-                    layer_prob[next_color]+=30*weight
-                    layer_prob[sub[-1]]+=20*weight
-                    layer_prob["🟡"]+=10*weight
+    # 3. Streak vermelho ≥3
+    detected, suggestion = check_streak(h, "🔴", 3)
+    if detected:
+        patterns_detected.append("Streak 🔴 ≥3")
+        next_entries.append(suggestion)
 
-        # --- Reset por empate ---
-        for k in range(1,l):
-            if seq[k]=="🟡" and seq[k-1] in ["🔴","🔵"]:
-                patterns_detected.append(f"Reset 🟡 (camada {weight})")
-                next_color = "🔴" if seq[k-1]=="🔵" else "🔵"
-                layer_prob[next_color]+=40*weight
-                layer_prob[seq[k-1]]+=20*weight
-                layer_prob["🟡"]+=10*weight
+    # 4. Streak azul ≥3
+    detected, suggestion = check_streak(h, "🔵", 3)
+    if detected:
+        patterns_detected.append("Streak 🔵 ≥3")
+        next_entries.append(suggestion)
 
-        # --- Padrões repetidos complexos ---
-        for size in range(4,7):
-            if l>=size*2:
-                if seq[-size:]==seq[-2*size:-size]:
-                    patterns_detected.append(f"Padrão repetido {size} cores (camada {weight})")
-                    repeated_color = seq[-size]
-                    layer_prob[repeated_color]+=50*weight
-                    for c in ["🔴","🔵","🟡"]:
-                        if c!=repeated_color:
-                            layer_prob[c]+=10*weight
+    # 5. Streak ≥4 (qualquer cor)
+    detected, suggestion = check_streak(h, None, 4)
+    if detected:
+        patterns_detected.append(f"Streak ≥4 {h[-1]}")
+        next_entries.append(suggestion)
 
-        return layer_prob
+    # 6. Alternância simples 2 cores
+    detected, suggestion = check_alternation(h, 2)
+    if detected:
+        patterns_detected.append("Alternância 2 cores")
+        next_entries.append(suggestion)
 
-    # ===== Análise por camadas =====
-    layer1 = layer_analysis(h[-6:], 1)       # superficial
-    layer2 = layer_analysis(h[-12:], 2)      # intermediária
-    layer3 = layer_analysis(h, 3)            # profunda
+    # 7. Alternância 3 cores
+    detected, suggestion = check_alternation(h, 3)
+    if detected:
+        patterns_detected.append("Alternância 3 cores")
+        next_entries.append(suggestion)
 
-    # Combinar probabilidades
-    for c in prob:
-        prob[c] = layer1[c]+layer2[c]+layer3[c]
+    # 8-10. Padrões repetidos 3,4,5 cores
+    for size in [3,4,5]:
+        detected, suggestion = check_repeat(h, size)
+        if detected:
+            patterns_detected.append(f"Padrão repetido {size} cores")
+            next_entries.append(suggestion)
 
-    # Normalizar
-    total = sum(prob.values())
-    if total==0:
-        prob = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
+    # 11. Ciclo invertido 3
+    detected, suggestion = check_cycle_inverted(h, 3)
+    if detected:
+        patterns_detected.append("Ciclo invertido 3")
+        next_entries.append(suggestion)
+
+    # 12. Ciclo repetido 3
+    detected, suggestion = check_cycle_repeated(h, 3)
+    if detected:
+        patterns_detected.append("Ciclo repetido 3")
+        next_entries.append(suggestion)
+
+    # 13-15. Empates
+    detected, suggestion = check_draw(h)
+    if detected:
+        patterns_detected.append("Empate detectado")
+        next_entries.append(suggestion)
+
+    # Determinar sugestão final
+    if not next_entries:
+        suggestion = "Aguardar"
     else:
-        for c in prob:
-            prob[c]=round(prob[c]/total*100,1)
+        if len(set(next_entries)) == 1:
+            suggestion = next_entries[0]
+        else:
+            suggestion = "Aguardar"
 
-    # Sugestão: cor com maior probabilidade
-    suggestion = max(prob, key=prob.get)
-
-    return patterns_detected, suggestion, prob
+    return patterns_detected, suggestion
 
 # ==============================
 # Interface Streamlit
 # ==============================
 st.set_page_config(page_title="Football Studio Analyzer Profissional", layout="centered")
 st.title("🎲 Football Studio Analyzer Profissional")
-st.write("IA avançada analisando os últimos 18 resultados com múltiplas camadas e padrões complexos.")
+st.write("Análise dos 15 principais padrões do Football Studio com histórico de 18 resultados. Sugestão baseada em padrões detectados.")
 
 # Inicializar histórico
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# ===== Entrada de resultados =====
+# Botões de entrada
 col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🔴 Vermelho"):
@@ -114,7 +161,7 @@ with col3:
     if st.button("🟡 Empate"):
         st.session_state.history.append("🟡")
 
-# ===== Histórico =====
+# Histórico mais recente à esquerda
 st.subheader("📜 Histórico (mais recente → mais antigo)")
 if st.session_state.history:
     max_per_line = 9
@@ -133,27 +180,21 @@ if st.session_state.history:
 else:
     st.write("Nenhum resultado inserido ainda.")
 
-# ===== Análise avançada =====
-st.subheader("🤖 Análise Profunda da IA")
-patterns, suggestion, prob = analyze_advanced(st.session_state.history)
+# Análise de padrões
+st.subheader("🤖 Análise de Padrões")
+patterns_detected, suggestion = analyze_patterns(st.session_state.history)
 
-# Padrões detectados
-if patterns:
+if patterns_detected:
     st.write("**Padrões detectados:**")
-    for p in patterns:
+    for p in patterns_detected:
         st.write(f"- {p} 🔥")
+else:
+    st.write("Nenhum padrão detectado.")
 
-# Probabilidades
-st.write("**Probabilidades ponderadas (%):**")
-c1,c2,c3 = st.columns(3)
-c1.metric("🔴", f"{prob['🔴']}%")
-c2.metric("🔵", f"{prob['🔵']}%")
-c3.metric("🟡", f"{prob['🟡']}%")
+# Sugestão baseada no padrão
+st.write(f"**Sugestão de entrada:** {suggestion}")
 
-# Sugestão de entrada
-st.write(f"**Sugestão de entrada (maior confiança):** {suggestion}")
-
-# ===== Reset do histórico =====
+# Reset histórico
 if st.button("🔄 Resetar Histórico"):
     st.session_state.history = []
     st.success("Histórico limpo!")
