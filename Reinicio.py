@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import random
 
 =============================================================
@@ -25,7 +25,6 @@ sugestao = "Sem leitura clara ainda."
 # Heurísticas simples de manipulação
 if count >= 3:
     nivel = 3
-    # Quando há streak, maior chance de quebra
     next_options = ["🔴", "🔵"]
     next_options.remove(last)
     probs[next_options[0]] = 60
@@ -35,7 +34,6 @@ if count >= 3:
 
 elif len(seq) >= 4 and seq[-4:] in (["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]):
     nivel = 4
-    # Alternância forte → chance de quebra
     next_options = ["🔴", "🔵"]
     next_options.remove(last)
     probs[last] = 20
@@ -45,7 +43,6 @@ elif len(seq) >= 4 and seq[-4:] in (["🔴","🔵","🔴","🔵"], ["🔵","🔴
 
 elif last == "🟡":
     nivel = 2
-    # Reset → próxima tende a ser vermelho ou azul
     probs["🟡"] = 5
     probs["🔴"] = 47.5
     probs["🔵"] = 47.5
@@ -67,9 +64,7 @@ Interface Streamlit
 
 =============================================================
 
-st.set_page_config(page_title="Football Studio Manipulation Analyzer", layout="centered")
-
-st.title("🎲 Football Studio Manipulation Analyzer") st.write("Insira manualmente os resultados e veja a análise preditiva da manipulação.")
+st.set_page_config(page_title="Football Studio Manipulation Analyzer", layout="centered") st.title("🎲 Football Studio Manipulation Analyzer") st.write("Insira manualmente os resultados e veja a análise preditiva da manipulação.")
 
 Sessão de histórico
 
