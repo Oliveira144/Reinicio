@@ -2,82 +2,91 @@ import streamlit as st
 from collections import Counter
 
 # ==============================
-# Função de análise combinada de padrões
+# Função de análise avançada
 # ==============================
-def analyze_patterns(history):
+def analyze_advanced(history):
     if not history:
         return [], None, {"🔴":33.3,"🔵":33.3,"🟡":33.3}
 
+    # Considerar apenas os últimos 18 resultados
+    h = history[-18:]
+
     patterns_detected = []
     prob = {"🔴":0,"🔵":0,"🟡":0}
-    streaks = []
 
-    # ======= Detectar streaks =======
-    current_color = history[-1]
-    streak_count = 1
-    for i in range(len(history)-2,-1,-1):
-        if history[i] == current_color:
-            streak_count += 1
-        else:
-            break
-    if current_color != "🟡" and streak_count>=2:
-        patterns_detected.append(f"Streak {current_color} ≥{streak_count}")
-        streaks.append((current_color, streak_count))
+    # ===== Função de camada =====
+    def layer_analysis(seq, weight):
+        layer_prob = {"🔴":0,"🔵":0,"🟡":0}
+        l = len(seq)
 
-    # ======= Detectar alternâncias simples e longas =======
-    if len(history) >= 4:
-        recent4 = history[-4:]
-        if recent4 in [["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]]:
-            patterns_detected.append("Alternância 4 cores")
-            # Probabilidade: próxima cor da alternância
-            next_color = recent4[-2]
-            prob[next_color] += 50
-            prob[recent4[-1]] += 30
-            prob["🟡"] += 20
+        # --- Streaks ---
+        i = l-1
+        while i>=0:
+            color = seq[i]
+            if color=="🟡":
+                i-=1
+                continue
+            streak = 1
+            j = i-1
+            while j>=0 and seq[j]==color:
+                streak+=1
+                j-=1
+            if streak>=2:
+                patterns_detected.append(f"Streak {color} ≥{streak} (camada {weight})")
+                layer_prob[color] += streak*5*weight
+            i = j
 
-    # ======= Detectar resets por empate =======
-    if history[-1]=="🟡" and len(history)>=2 and history[-2] in ["🔴","🔵"]:
-        patterns_detected.append("Reset 🟡")
-        next_color = "🔴" if history[-2]=="🔵" else "🔵"
-        prob[next_color] += 60
-        prob["🟡"] += 10
-        prob[history[-2]] += 30
+        # --- Alternâncias simples ---
+        if l>=4:
+            for start in range(l-3):
+                sub = seq[start:start+4]
+                if sub in [["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]]:
+                    patterns_detected.append(f"Alternância 4 cores (camada {weight})")
+                    next_color = sub[-2]
+                    layer_prob[next_color]+=30*weight
+                    layer_prob[sub[-1]]+=20*weight
+                    layer_prob["🟡"]+=10*weight
 
-    # ======= Detectar padrões repetidos complexos =======
-    for size in range(4,7):
-        if len(history) >= size*2:
-            if history[-size:] == history[-2*size:-size]:
-                patterns_detected.append(f"Padrão repetido {size} cores")
-                repeated_color = history[-size]
-                prob[repeated_color] += 60
-                # Ajuste para outras cores
-                for c in ["🔴","🔵","🟡"]:
-                    if c != repeated_color:
-                        prob[c] += 20 if c==history[-1] else 10
+        # --- Reset por empate ---
+        for k in range(1,l):
+            if seq[k]=="🟡" and seq[k-1] in ["🔴","🔵"]:
+                patterns_detected.append(f"Reset 🟡 (camada {weight})")
+                next_color = "🔴" if seq[k-1]=="🔵" else "🔵"
+                layer_prob[next_color]+=40*weight
+                layer_prob[seq[k-1]]+=20*weight
+                layer_prob["🟡"]+=10*weight
 
-    # ======= Alternância interrompida por empate =======
-    if len(history) >= 3 and history[-2]=="🟡" and history[-3]!=history[-1]:
-        patterns_detected.append("Empate na alternância")
-        prob[history[-3]] += 60
-        prob[history[-1]] += 30
-        prob["🟡"] += 10
+        # --- Padrões repetidos complexos ---
+        for size in range(4,7):
+            if l>=size*2:
+                if seq[-size:]==seq[-2*size:-size]:
+                    patterns_detected.append(f"Padrão repetido {size} cores (camada {weight})")
+                    repeated_color = seq[-size]
+                    layer_prob[repeated_color]+=50*weight
+                    for c in ["🔴","🔵","🟡"]:
+                        if c!=repeated_color:
+                            layer_prob[c]+=10*weight
 
-    # ======= Ajustar probabilidade baseada em streaks =======
-    for color, count in streaks:
-        prob[color] += min(count*10,50)
-        other_color = "🔴" if color=="🔵" else "🔵"
-        prob[other_color] += 30
+        return layer_prob
 
-    # Normalizar probabilidades para somar 100
+    # ===== Análise por camadas =====
+    layer1 = layer_analysis(h[-6:], 1)       # superficial
+    layer2 = layer_analysis(h[-12:], 2)      # intermediária
+    layer3 = layer_analysis(h, 3)            # profunda
+
+    # Combinar probabilidades
+    for c in prob:
+        prob[c] = layer1[c]+layer2[c]+layer3[c]
+
+    # Normalizar
     total = sum(prob.values())
-    if total == 0:
+    if total==0:
         prob = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
     else:
         for c in prob:
-            prob[c] = round(prob[c]/total*100,1)
+            prob[c]=round(prob[c]/total*100,1)
 
-    # ======= Sugestão final =======
-    # Cor com maior probabilidade
+    # Sugestão: cor com maior probabilidade
     suggestion = max(prob, key=prob.get)
 
     return patterns_detected, suggestion, prob
@@ -85,15 +94,16 @@ def analyze_patterns(history):
 # ==============================
 # Interface Streamlit
 # ==============================
-st.set_page_config(page_title="Football Studio Analyzer Inteligente", layout="centered")
-st.title("🎲 Football Studio Analyzer Inteligente")
-st.write("Insira os resultados e veja a sugestão de aposta com confiança baseada em múltiplos padrões.")
+st.set_page_config(page_title="Football Studio Analyzer Profissional", layout="centered")
+st.title("🎲 Football Studio Analyzer Profissional")
+st.write("IA avançada analisando os últimos 18 resultados com múltiplas camadas e padrões complexos.")
 
+# Inicializar histórico
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Botões de entrada
-col1,col2,col3 = st.columns(3)
+# ===== Entrada de resultados =====
+col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🔴 Vermelho"):
         st.session_state.history.append("🔴")
@@ -104,7 +114,7 @@ with col3:
     if st.button("🟡 Empate"):
         st.session_state.history.append("🟡")
 
-# Histórico da esquerda para direita, mais recente à esquerda
+# ===== Histórico =====
 st.subheader("📜 Histórico (mais recente → mais antigo)")
 if st.session_state.history:
     max_per_line = 9
@@ -123,11 +133,11 @@ if st.session_state.history:
 else:
     st.write("Nenhum resultado inserido ainda.")
 
-# Análise inteligente
-st.subheader("🤖 Análise Avançada da IA")
-patterns, suggestion, prob = analyze_patterns(st.session_state.history)
+# ===== Análise avançada =====
+st.subheader("🤖 Análise Profunda da IA")
+patterns, suggestion, prob = analyze_advanced(st.session_state.history)
 
-# Mostrar padrões detectados
+# Padrões detectados
 if patterns:
     st.write("**Padrões detectados:**")
     for p in patterns:
@@ -143,7 +153,7 @@ c3.metric("🟡", f"{prob['🟡']}%")
 # Sugestão de entrada
 st.write(f"**Sugestão de entrada (maior confiança):** {suggestion}")
 
-# Reset histórico
+# ===== Reset do histórico =====
 if st.button("🔄 Resetar Histórico"):
     st.session_state.history = []
     st.success("Histórico limpo!")
