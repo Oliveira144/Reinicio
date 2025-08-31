@@ -2,92 +2,92 @@ import streamlit as st
 from collections import Counter
 
 # ==============================
-# Definição dos padrões avançados
+# Função de análise combinada de padrões
 # ==============================
-def detect_patterns(history):
-    patterns_detected = []
-    suggestion = None
-    prob = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
-
+def analyze_patterns(history):
     if not history:
-        return patterns_detected, suggestion, prob
+        return [], None, {"🔴":33.3,"🔵":33.3,"🟡":33.3}
 
-    last = history[-1]
-    streak = 1
+    patterns_detected = []
+    prob = {"🔴":0,"🔵":0,"🟡":0}
+    streaks = []
+
+    # ======= Detectar streaks =======
+    current_color = history[-1]
+    streak_count = 1
     for i in range(len(history)-2,-1,-1):
-        if history[i]==last:
-            streak += 1
+        if history[i] == current_color:
+            streak_count += 1
         else:
             break
+    if current_color != "🟡" and streak_count>=2:
+        patterns_detected.append(f"Streak {current_color} ≥{streak_count}")
+        streaks.append((current_color, streak_count))
 
-    # ======= Streaks =======
-    if last != "🟡" and streak>=2:
-        patterns_detected.append(f"Streak {last} ≥ {streak}")
-        # Probabilidade adaptativa
-        prob[last] = max(10, 50-streak*5)
-        prob["🔴" if last=="🔵" else "🔵"] = 100-prob[last]-10
-        prob["🟡"] = 10
-        suggestion = "🔴" if last=="🔵" else "🔵"
-
-    # ======= Alternâncias =======
-    if len(history)>=4:
+    # ======= Detectar alternâncias simples e longas =======
+    if len(history) >= 4:
         recent4 = history[-4:]
         if recent4 in [["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]]:
             patterns_detected.append("Alternância 4 cores")
-            # Sugere próxima cor da alternância
-            suggestion = recent4[-2]
-            prob[suggestion] = 60
-            prob[last] = 30
-            prob["🟡"] = 10
+            # Probabilidade: próxima cor da alternância
+            next_color = recent4[-2]
+            prob[next_color] += 50
+            prob[recent4[-1]] += 30
+            prob["🟡"] += 20
 
-    # ======= Reset por empate =======
-    if last == "🟡" and len(history)>=2 and history[-2] in ["🔴","🔵"]:
+    # ======= Detectar resets por empate =======
+    if history[-1]=="🟡" and len(history)>=2 and history[-2] in ["🔴","🔵"]:
         patterns_detected.append("Reset 🟡")
-        suggestion = "🔴" if history[-2]=="🔵" else "🔵"
-        prob = {"🔴":47.5,"🔵":47.5,"🟡":5}
+        next_color = "🔴" if history[-2]=="🔵" else "🔵"
+        prob[next_color] += 60
+        prob["🟡"] += 10
+        prob[history[-2]] += 30
 
-    # ======= Padrões repetidos complexos =======
+    # ======= Detectar padrões repetidos complexos =======
     for size in range(4,7):
-        if len(history)>=size*2:
+        if len(history) >= size*2:
             if history[-size:] == history[-2*size:-size]:
                 patterns_detected.append(f"Padrão repetido {size} cores")
-                suggestion = history[-size]
-                prob[suggestion] = 60
-                prob[last] = 30
-                prob["🟡"] = 10
+                repeated_color = history[-size]
+                prob[repeated_color] += 60
+                # Ajuste para outras cores
+                for c in ["🔴","🔵","🟡"]:
+                    if c != repeated_color:
+                        prob[c] += 20 if c==history[-1] else 10
 
     # ======= Alternância interrompida por empate =======
-    if len(history)>=3 and history[-2]=="🟡" and history[-3]!=history[-1]:
+    if len(history) >= 3 and history[-2]=="🟡" and history[-3]!=history[-1]:
         patterns_detected.append("Empate na alternância")
-        suggestion = history[-3]
-        prob[suggestion] = 60
-        prob[last] = 30
-        prob["🟡"] = 10
+        prob[history[-3]] += 60
+        prob[history[-1]] += 30
+        prob["🟡"] += 10
 
-    # ======= Caso nenhum padrão detectado =======
-    if not patterns_detected:
-        # Heurística simples com contagem
-        count = Counter(history[-10:])  # últimos 10 resultados
-        most_common = count.most_common()
-        if most_common[0][0] != "🟡":
-            suggestion = most_common[0][0]
-            prob[suggestion] = 50
-            others = ["🔴","🔵","🟡"]
-            others.remove(suggestion)
-            prob[others[0]] = 30
-            prob[others[1]] = 20
-        else:
-            suggestion = "🔴"
-            prob = {"🔴":40,"🔵":40,"🟡":20}
+    # ======= Ajustar probabilidade baseada em streaks =======
+    for color, count in streaks:
+        prob[color] += min(count*10,50)
+        other_color = "🔴" if color=="🔵" else "🔵"
+        prob[other_color] += 30
+
+    # Normalizar probabilidades para somar 100
+    total = sum(prob.values())
+    if total == 0:
+        prob = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
+    else:
+        for c in prob:
+            prob[c] = round(prob[c]/total*100,1)
+
+    # ======= Sugestão final =======
+    # Cor com maior probabilidade
+    suggestion = max(prob, key=prob.get)
 
     return patterns_detected, suggestion, prob
 
 # ==============================
 # Interface Streamlit
 # ==============================
-st.set_page_config(page_title="Football Studio Analyzer Avançado", layout="centered")
-st.title("🎲 Football Studio Analyzer Avançado")
-st.write("Insira os resultados e veja a sugestão da IA baseada em padrões complexos e análise adaptativa.")
+st.set_page_config(page_title="Football Studio Analyzer Inteligente", layout="centered")
+st.title("🎲 Football Studio Analyzer Inteligente")
+st.write("Insira os resultados e veja a sugestão de aposta com confiança baseada em múltiplos padrões.")
 
 if "history" not in st.session_state:
     st.session_state.history = []
@@ -125,7 +125,7 @@ else:
 
 # Análise inteligente
 st.subheader("🤖 Análise Avançada da IA")
-patterns, suggestion, prob = detect_patterns(st.session_state.history)
+patterns, suggestion, prob = analyze_patterns(st.session_state.history)
 
 # Mostrar padrões detectados
 if patterns:
@@ -134,14 +134,14 @@ if patterns:
         st.write(f"- {p} 🔥")
 
 # Probabilidades
-st.write("**Probabilidades adaptativas:**")
+st.write("**Probabilidades ponderadas (%):**")
 c1,c2,c3 = st.columns(3)
 c1.metric("🔴", f"{prob['🔴']}%")
 c2.metric("🔵", f"{prob['🔵']}%")
 c3.metric("🟡", f"{prob['🟡']}%")
 
 # Sugestão de entrada
-st.write(f"**Sugestão de entrada:** {suggestion}")
+st.write(f"**Sugestão de entrada (maior confiança):** {suggestion}")
 
 # Reset histórico
 if st.button("🔄 Resetar Histórico"):
