@@ -1,35 +1,16 @@
 import streamlit as st
+from collections import Counter
 
 # ==============================
-# Definição dos 15 padrões principais
+# Definição dos padrões avançados
 # ==============================
-PATTERNS = [
-    {"nome": "Streak 🔴 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔴" and h[-2]=="🔴", "sugestao": lambda h: "🔵"},
-    {"nome": "Streak 🔵 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔵" and h[-2]=="🔵", "sugestao": lambda h: "🔴"},
-    {"nome": "Alternância 🔴🔵🔴🔵", "check": lambda h: len(h)>=4 and h[-4:]==["🔴","🔵","🔴","🔵"], "sugestao": lambda h: "🔴"},
-    {"nome": "Alternância 🔵🔴🔵🔴", "check": lambda h: len(h)>=4 and h[-4:]==["🔵","🔴","🔵","🔴"], "sugestao": lambda h: "🔵"},
-    {"nome": "Reset 🟡 depois de streak", "check": lambda h: len(h)>=2 and h[-1]=="🟡" and h[-2] in ["🔴","🔵"], 
-     "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"},
-    {"nome": "Duplo 🔴🔴 seguido de 🔵", "check": lambda h: len(h)>=3 and h[-3:]==["🔴","🔴","🔵"], "sugestao": lambda h: "🔵"},
-    {"nome": "Duplo 🔵🔵 seguido de 🔴", "check": lambda h: len(h)>=3 and h[-3:]==["🔵","🔵","🔴"], "sugestao": lambda h: "🔴"},
-    {"nome": "Triplo 🔴🔴🔴", "check": lambda h: len(h)>=3 and h[-3:]==["🔴","🔴","🔴"], "sugestao": lambda h: "🔵"},
-    {"nome": "Triplo 🔵🔵🔵", "check": lambda h: len(h)>=3 and h[-3:]==["🔵","🔵","🔵"], "sugestao": lambda h: "🔴"},
-    {"nome": "Empate no meio da alternância", "check": lambda h: len(h)>=3 and h[-2]=="🟡" and h[-3]!=h[-1], 
-     "sugestao": lambda h: h[-3]},
-    {"nome": "Sequência 🔴🔵🔵🔴", "check": lambda h: len(h)>=4 and h[-4:]==["🔴","🔵","🔵","🔴"], "sugestao": lambda h: "🔵"},
-    {"nome": "Sequência 🔵🔴🔴🔵", "check": lambda h: len(h)>=4 and h[-4:]==["🔵","🔴","🔴","🔵"], "sugestao": lambda h: "🔴"},
-    {"nome": "Padrão repetido 4 cores", "check": lambda h: len(h)>=8 and h[-8:-4]==h[-4:], "sugestao": lambda h: h[-4]},
-    {"nome": "Padrão repetido 5 cores", "check": lambda h: len(h)>=10 and h[-10:-5]==h[-5:], "sugestao": lambda h: h[-5]},
-    {"nome": "Padrão complexo reset+streak", "check": lambda h: len(h)>=4 and h[-1]=="🟡" and h[-2]==h[-3]==h[-4], 
-     "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"}
-]
+def detect_patterns(history):
+    patterns_detected = []
+    suggestion = None
+    prob = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
 
-# ==============================
-# Função de análise com padrões
-# ==============================
-def analyze_history(history):
     if not history:
-        return {"nivel":0, "prob":{"🔴":33.3,"🔵":33.3,"🟡":33.3}, "sugestao":"Aguardando resultados...", "padrao":None, "padrao_repetido":False}
+        return patterns_detected, suggestion, prob
 
     last = history[-1]
     streak = 1
@@ -39,65 +20,80 @@ def analyze_history(history):
         else:
             break
 
-    probs = {"🔴":33.3,"🔵":33.3,"🟡":33.3}
-    nivel = 1
-    sugestao = ""
-    padrao_encontrado = None
-    padrao_repetido = False
+    # ======= Streaks =======
+    if last != "🟡" and streak>=2:
+        patterns_detected.append(f"Streak {last} ≥ {streak}")
+        # Probabilidade adaptativa
+        prob[last] = max(10, 50-streak*5)
+        prob["🔴" if last=="🔵" else "🔵"] = 100-prob[last]-10
+        prob["🟡"] = 10
+        suggestion = "🔴" if last=="🔵" else "🔵"
 
-    # Verificar padrões
-    for p in PATTERNS:
-        try:
-            if p["check"](history):
-                padrao_encontrado = p["nome"]
-                sugestao = p["sugestao"](history) if callable(p["sugestao"]) else p["sugestao"]
-                # Verifica se padrão se repetiu antes
-                padrao_repetido = history[:-len(history)//2].count(history[-1])>=1
-                break
-        except:
-            continue
+    # ======= Alternâncias =======
+    if len(history)>=4:
+        recent4 = history[-4:]
+        if recent4 in [["🔴","🔵","🔴","🔵"], ["🔵","🔴","🔵","🔴"]]:
+            patterns_detected.append("Alternância 4 cores")
+            # Sugere próxima cor da alternância
+            suggestion = recent4[-2]
+            prob[suggestion] = 60
+            prob[last] = 30
+            prob["🟡"] = 10
 
-    # Se nenhum padrão encontrado, heurística simples
-    if not padrao_encontrado:
-        if streak >=2 and last != "🟡":
-            nivel = 3
-            options = ["🔴","🔵"]
-            options.remove(last)
-            sugestao = options[0]
-            probs[last]=20
-            probs[options[0]]=60
-            probs["🟡"]=20
-        elif last=="🟡":
-            nivel=2
-            sugestao = "Apostar 🔴 ou 🔵"
-            probs["🟡"]=5
-            probs["🔴"]=47.5
-            probs["🔵"]=47.5
+    # ======= Reset por empate =======
+    if last == "🟡" and len(history)>=2 and history[-2] in ["🔴","🔵"]:
+        patterns_detected.append("Reset 🟡")
+        suggestion = "🔴" if history[-2]=="🔵" else "🔵"
+        prob = {"🔴":47.5,"🔵":47.5,"🟡":5}
+
+    # ======= Padrões repetidos complexos =======
+    for size in range(4,7):
+        if len(history)>=size*2:
+            if history[-size:] == history[-2*size:-size]:
+                patterns_detected.append(f"Padrão repetido {size} cores")
+                suggestion = history[-size]
+                prob[suggestion] = 60
+                prob[last] = 30
+                prob["🟡"] = 10
+
+    # ======= Alternância interrompida por empate =======
+    if len(history)>=3 and history[-2]=="🟡" and history[-3]!=history[-1]:
+        patterns_detected.append("Empate na alternância")
+        suggestion = history[-3]
+        prob[suggestion] = 60
+        prob[last] = 30
+        prob["🟡"] = 10
+
+    # ======= Caso nenhum padrão detectado =======
+    if not patterns_detected:
+        # Heurística simples com contagem
+        count = Counter(history[-10:])  # últimos 10 resultados
+        most_common = count.most_common()
+        if most_common[0][0] != "🟡":
+            suggestion = most_common[0][0]
+            prob[suggestion] = 50
+            others = ["🔴","🔵","🟡"]
+            others.remove(suggestion)
+            prob[others[0]] = 30
+            prob[others[1]] = 20
         else:
-            nivel=1
-            count_r=history.count("🔴")
-            count_b=history.count("🔵")
-            if count_r<count_b:
-                sugestao="🔴"
-            elif count_b<count_r:
-                sugestao="🔵"
-            else:
-                sugestao="🔴 ou 🔵"
+            suggestion = "🔴"
+            prob = {"🔴":40,"🔵":40,"🟡":20}
 
-    return {"nivel":nivel, "prob":probs, "sugestao":sugestao, "padrao":padrao_encontrado, "padrao_repetido":padrao_repetido}
+    return patterns_detected, suggestion, prob
 
 # ==============================
 # Interface Streamlit
 # ==============================
-st.set_page_config(page_title="Football Studio Analyzer", layout="centered")
-st.title("🎲 Football Studio Analyzer")
-st.write("Insira os resultados e veja a sugestão da IA baseada em padrões.")
+st.set_page_config(page_title="Football Studio Analyzer Avançado", layout="centered")
+st.title("🎲 Football Studio Analyzer Avançado")
+st.write("Insira os resultados e veja a sugestão da IA baseada em padrões complexos e análise adaptativa.")
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # Botões de entrada
-col1, col2, col3 = st.columns(3)
+col1,col2,col3 = st.columns(3)
 with col1:
     if st.button("🔴 Vermelho"):
         st.session_state.history.append("🔴")
@@ -112,7 +108,7 @@ with col3:
 st.subheader("📜 Histórico (mais recente → mais antigo)")
 if st.session_state.history:
     max_per_line = 9
-    reversed_history = list(reversed(st.session_state.history))  # inverter para mostrar mais recente à esquerda
+    reversed_history = list(reversed(st.session_state.history))
     lines=[]
     current_line=[]
     for idx,res in enumerate(reversed_history):
@@ -127,23 +123,27 @@ if st.session_state.history:
 else:
     st.write("Nenhum resultado inserido ainda.")
 
-# Análise
-st.subheader("🤖 Análise da IA")
-analysis = analyze_history(st.session_state.history)
-st.write(f"**Nível de manipulação:** {analysis['nivel']}")
-st.write("**Probabilidades:**")
-c1,c2,c3=st.columns(3)
-c1.metric("🔴", f"{analysis['prob']['🔴']}%")
-c2.metric("🔵", f"{analysis['prob']['🔵']}%")
-c3.metric("🟡", f"{analysis['prob']['🟡']}%")
+# Análise inteligente
+st.subheader("🤖 Análise Avançada da IA")
+patterns, suggestion, prob = detect_patterns(st.session_state.history)
 
-# Padrão detectado
-if analysis["padrao"]:
-    destaque = " 🔥" if analysis["padrao_repetido"] else ""
-    st.write(f"**Padrão detectado:** {analysis['padrao']}{destaque}")
-st.write(f"**Sugestão de entrada:** {analysis['sugestao']}")
+# Mostrar padrões detectados
+if patterns:
+    st.write("**Padrões detectados:**")
+    for p in patterns:
+        st.write(f"- {p} 🔥")
 
-# Reset
+# Probabilidades
+st.write("**Probabilidades adaptativas:**")
+c1,c2,c3 = st.columns(3)
+c1.metric("🔴", f"{prob['🔴']}%")
+c2.metric("🔵", f"{prob['🔵']}%")
+c3.metric("🟡", f"{prob['🟡']}%")
+
+# Sugestão de entrada
+st.write(f"**Sugestão de entrada:** {suggestion}")
+
+# Reset histórico
 if st.button("🔄 Resetar Histórico"):
-    st.session_state.history=[]
+    st.session_state.history = []
     st.success("Histórico limpo!")
