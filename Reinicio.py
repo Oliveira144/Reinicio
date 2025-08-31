@@ -4,21 +4,24 @@ import streamlit as st
 # Definição dos 15 padrões principais
 # ==============================
 PATTERNS = [
-    {"nome": "Streak 🔴 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔴" and h[-2]=="🔴", "sugestao": "🔵"},
-    {"nome": "Streak 🔵 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔵" and h[-2]=="🔵", "sugestao": "🔴"},
-    {"nome": "Alternância 🔴🔵🔴🔵", "check": lambda h: h[-4:]==["🔴","🔵","🔴","🔵"], "sugestao": "🔴"},
-    {"nome": "Alternância 🔵🔴🔵🔴", "check": lambda h: h[-4:]==["🔵","🔴","🔵","🔴"], "sugestao": "🔵"},
-    {"nome": "Reset 🟡 depois de streak", "check": lambda h: len(h)>=2 and h[-1]=="🟡" and h[-2] in ["🔴","🔵"], "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"},
-    {"nome": "Duplo 🔴🔴 seguido de 🔵", "check": lambda h: len(h)>=3 and h[-3:] == ["🔴","🔴","🔵"], "sugestao": "🔵"},
-    {"nome": "Duplo 🔵🔵 seguido de 🔴", "check": lambda h: len(h)>=3 and h[-3:] == ["🔵","🔵","🔴"], "sugestao": "🔴"},
-    {"nome": "Triplo 🔴🔴🔴", "check": lambda h: len(h)>=3 and h[-3:] == ["🔴","🔴","🔴"], "sugestao": "🔵"},
-    {"nome": "Triplo 🔵🔵🔵", "check": lambda h: len(h)>=3 and h[-3:] == ["🔵","🔵","🔵"], "sugestao": "🔴"},
-    {"nome": "Empate no meio da alternância", "check": lambda h: len(h)>=3 and h[-2]=="🟡" and h[-3]!=h[-1], "sugestao": lambda h: h[-3]},
-    {"nome": "Sequência 🔴🔵🔵🔴", "check": lambda h: len(h)>=4 and h[-4:]==["🔴","🔵","🔵","🔴"], "sugestao": "🔵"},
-    {"nome": "Sequência 🔵🔴🔴🔵", "check": lambda h: len(h)>=4 and h[-4:]==["🔵","🔴","🔴","🔵"], "sugestao": "🔴"},
-    {"nome": "Padrão repetido 4 cores", "check": lambda h: len(h)>=8 and h[-8:-4]==h[-4:], "sugestao": h[-4]}, 
-    {"nome": "Padrão repetido 5 cores", "check": lambda h: len(h)>=10 and h[-10:-5]==h[-5:], "sugestao": h[-5]}, 
-    {"nome": "Padrão complexo reset+streak", "check": lambda h: len(h)>=4 and h[-1]=="🟡" and h[-2]==h[-3]==h[-4], "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"}
+    {"nome": "Streak 🔴 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔴" and h[-2]=="🔴", "sugestao": lambda h: "🔵"},
+    {"nome": "Streak 🔵 ≥2", "check": lambda h: len(h)>=2 and h[-1]=="🔵" and h[-2]=="🔵", "sugestao": lambda h: "🔴"},
+    {"nome": "Alternância 🔴🔵🔴🔵", "check": lambda h: len(h)>=4 and h[-4:]==["🔴","🔵","🔴","🔵"], "sugestao": lambda h: "🔴"},
+    {"nome": "Alternância 🔵🔴🔵🔴", "check": lambda h: len(h)>=4 and h[-4:]==["🔵","🔴","🔵","🔴"], "sugestao": lambda h: "🔵"},
+    {"nome": "Reset 🟡 depois de streak", "check": lambda h: len(h)>=2 and h[-1]=="🟡" and h[-2] in ["🔴","🔵"], 
+     "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"},
+    {"nome": "Duplo 🔴🔴 seguido de 🔵", "check": lambda h: len(h)>=3 and h[-3:]==["🔴","🔴","🔵"], "sugestao": lambda h: "🔵"},
+    {"nome": "Duplo 🔵🔵 seguido de 🔴", "check": lambda h: len(h)>=3 and h[-3:]==["🔵","🔵","🔴"], "sugestao": lambda h: "🔴"},
+    {"nome": "Triplo 🔴🔴🔴", "check": lambda h: len(h)>=3 and h[-3:]==["🔴","🔴","🔴"], "sugestao": lambda h: "🔵"},
+    {"nome": "Triplo 🔵🔵🔵", "check": lambda h: len(h)>=3 and h[-3:]==["🔵","🔵","🔵"], "sugestao": lambda h: "🔴"},
+    {"nome": "Empate no meio da alternância", "check": lambda h: len(h)>=3 and h[-2]=="🟡" and h[-3]!=h[-1], 
+     "sugestao": lambda h: h[-3]},
+    {"nome": "Sequência 🔴🔵🔵🔴", "check": lambda h: len(h)>=4 and h[-4:]==["🔴","🔵","🔵","🔴"], "sugestao": lambda h: "🔵"},
+    {"nome": "Sequência 🔵🔴🔴🔵", "check": lambda h: len(h)>=4 and h[-4:]==["🔵","🔴","🔴","🔵"], "sugestao": lambda h: "🔴"},
+    {"nome": "Padrão repetido 4 cores", "check": lambda h: len(h)>=8 and h[-8:-4]==h[-4:], "sugestao": lambda h: h[-4]},
+    {"nome": "Padrão repetido 5 cores", "check": lambda h: len(h)>=10 and h[-10:-5]==h[-5:], "sugestao": lambda h: h[-5]},
+    {"nome": "Padrão complexo reset+streak", "check": lambda h: len(h)>=4 and h[-1]=="🟡" and h[-2]==h[-3]==h[-4], 
+     "sugestao": lambda h: "🔴" if h[-2]=="🔵" else "🔵"}
 ]
 
 # ==============================
@@ -47,9 +50,9 @@ def analyze_history(history):
         try:
             if p["check"](history):
                 padrao_encontrado = p["nome"]
-                s = p["sugestao"]
-                sugestao = s(history) if callable(s) else s
-                padrao_repetido = True if history[-len(history)//2:-1].count(history[-1])>=1 else False
+                sugestao = p["sugestao"](history) if callable(p["sugestao"]) else p["sugestao"]
+                # Verifica se padrão se repetiu antes
+                padrao_repetido = history[:-len(history)//2].count(history[-1])>=1
                 break
         except:
             continue
@@ -119,10 +122,7 @@ if st.session_state.history:
     if current_line:
         lines.append(current_line)
     for line in lines:
-        display_line = []
-        for res in line:
-            display_line.append(res)
-        st.write(" ".join(display_line))
+        st.write(" ".join(line))
 else:
     st.write("Nenhum resultado inserido ainda.")
 
