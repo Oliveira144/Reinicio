@@ -2,438 +2,383 @@ import streamlit as st
 from collections import deque, Counter
 from typing import List, Tuple, Optional, Dict
 import re
+import numpy as np
+from datetime import datetime
 
 # ==============================
 # Configurações e constantes
 # ==============================
-MAX_HISTORY = 30  # Aumentado para capturar padrões mais longos
-STREAK_LENGTHS = [2, 3, 4, 5, 6]  # Streaks mais longos
-PATTERN_SIZES = [2, 3, 4, 5, 6]  # Padrões maiores
-CYCLE_SIZES = [2, 3, 4, 5]  # Ciclos de diferentes tamanhos
+MAX_HISTORY = 30
+STREAK_LENGTHS = [2, 3, 4, 5, 6]
+PATTERN_SIZES = [2, 3, 4, 5, 6]
+CYCLE_SIZES = [2, 3, 4, 5]
 
 # ==============================
-# Funções avançadas para detectar padrões
+# Classe principal de análise dinâmica
 # ==============================
-def get_opposite_color(color: str) -> str:
-    """Retorna a cor oposta para sugestão de apostas"""
-    if color == "🔴":
-        return "🔵"
-    elif color == "🔵":
-        return "🔴"
-    return "🟡"
-
-def check_streak(history: List[str], color: Optional[str] = None, length: int = 2) -> Tuple[bool, Optional[str]]:
-    """Verifica se há uma sequência de cores iguais no histórico"""
-    if len(history) < length:
-        return False, None
+class FootballStudioAnalyzer:
+    def __init__(self):
+        self.pattern_weights = {
+            'high_streak': 5,          # Streaks longos
+            'medium_streak': 3,        # Streaks médios
+            'low_streak': 2,           # Streaks curtos
+            'repetition': 4,           # Padrões repetidos
+            'alternation': 3,          # Padrões de alternância
+            'cycle': 4,                # Ciclos
+            'mirror': 4,               # Padrões espelhados
+            'draw_pattern': 3,         # Padrões com empates
+            'statistical': 5,          # Análise estatística
+            'cluster': 3,              # Agrupamentos
+            'zebra': 3,                # Padrão zebra
+            'reversal': 3              # Reversões
+        }
         
-    streak = history[-length:]
+    def get_opposite_color(self, color: str) -> str:
+        """Retorna a cor oposta para sugestão de apostas"""
+        if color == "🔴": return "🔵"
+        elif color == "🔵": return "🔴"
+        return "🟡"
     
-    if color:
-        if all(c == color for c in streak):
-            opposite = get_opposite_color(color)
-            return True, f"{opposite} Quebrar streak {length}x{color}"
-    else:
-        if len(set(streak)) == 1 and streak[0] != "🟡":
-            opposite = get_opposite_color(streak[0])
-            return True, f"{opposite} Quebrar streak {length}x{streak[0]}"
+    def detect_all_patterns(self, history: List[str]) -> Tuple[List[Dict], Dict]:
+        """Detecta todos os padrões possíveis no histórico"""
+        if len(history) < 5:
+            return [], {}
             
-    return False, None
-
-def check_alternation(history: List[str], size: int) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões de alternância"""
-    if len(history) < size * 2:
-        return False, None
+        patterns = []
+        confidence_scores = {"🔴": 0, "🔵": 0, "🟡": 0}
         
-    first_segment = history[-2*size:-size]
-    second_segment = history[-size:]
+        # 1. Análise de streaks (sequências)
+        streaks = self._analyze_streaks(history)
+        patterns.extend(streaks)
+        
+        # 2. Análise de padrões repetitivos
+        repetitions = self._analyze_repetitions(history)
+        patterns.extend(repetitions)
+        
+        # 3. Análise de ciclos
+        cycles = self._analyze_cycles(history)
+        patterns.extend(cycles)
+        
+        # 4. Análise de padrões com empates
+        draw_patterns = self._analyze_draw_patterns(history)
+        patterns.extend(draw_patterns)
+        
+        # 5. Análise estatística
+        stats_patterns = self._analyze_statistical(history)
+        patterns.extend(stats_patterns)
+        
+        # 6. Análise de agrupamentos
+        clusters = self._analyze_clusters(history)
+        patterns.extend(clusters)
+        
+        # 7. Análise de padrões avançados
+        advanced = self._analyze_advanced_patterns(history)
+        patterns.extend(advanced)
+        
+        # Calcular pontuação de confiança para cada cor
+        for pattern in patterns:
+            if pattern['suggestion'] in confidence_scores:
+                confidence_scores[pattern['suggestion']] += pattern['confidence']
+        
+        return patterns, confidence_scores
     
-    if first_segment == second_segment and len(set(first_segment)) > 1:
-        next_color = first_segment[0] if first_segment[0] != "🟡" else first_segment[1]
-        return True, f"{next_color} Continuar alternância {size}x{size}"
+    def _analyze_streaks(self, history: List[str]) -> List[Dict]:
+        """Analisa sequências de cores iguais"""
+        patterns = []
+        recent = history[-10:]  # Últimas 10 jogadas
         
-    return False, None
-
-def check_repeat(history: List[str], size: int) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões repetidos"""
-    if len(history) < size * 2:
-        return False, None
-        
-    if history[-2*size:-size] == history[-size:]:
-        next_color = history[-2*size] if history[-2*size] != "🟡" else history[-2*size+1]
-        return True, f"{next_color} Repetir padrão {size} cores"
-        
-    return False, None
-
-def check_cycle_inverted(history: List[str], size: int = 3) -> Tuple[bool, Optional[str]]:
-    """Verifica ciclos invertidos"""
-    if len(history) < size * 2:
-        return False, None
-        
-    if history[-2*size:-size] == list(reversed(history[-size:])):
-        last_color = history[-1]
-        if last_color != "🟡":
-            opposite = get_opposite_color(last_color)
-            return True, f"{opposite} Ciclo invertido {size}"
-        
-    return False, None
-
-def check_cycle_repeated(history: List[str], size: int = 3) -> Tuple[bool, Optional[str]]:
-    """Verifica ciclos repetidos"""
-    if len(history) < size * 2:
-        return False, None
-        
-    if history[-2*size:-size] == history[-size:]:
-        next_color = history[-2*size] if history[-2*size] != "🟡" else history[-2*size+1]
-        return True, f"{next_color} Ciclo repetido {size}"
-        
-    return False, None
-
-def check_draw_patterns(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões relacionados a empates"""
-    if not history:
-        return False, None
-        
-    # Padrão 1: Empate seguido de tendência
-    if len(history) >= 3 and history[-1] != "🟡" and history[-2] == "🟡":
-        return True, f"{history[-1]} Continuar após empate"
-    
-    # Padrão 2: Dois empates consecutivos
-    if len(history) >= 2 and history[-1] == "🟡" and history[-2] == "🟡":
-        # Após dois empates, tendência de voltar a cor anterior
-        if len(history) >= 3:
-            return True, f"{history[-3]} Voltar após 2 empates"
-    
-    # Padrão 3: Empate após sequência de cores
-    if len(history) >= 4 and history[-1] == "🟡" and history[-2] != "🟡":
-        # Se havia uma sequência antes do empate, tende a continuar
-        if history[-3] == history[-2]:
-            return True, f"{history[-2]} Continuar sequência após empate"
-        else:
-            opposite = get_opposite_color(history[-2])
-            return True, f"{opposite} Alternar após empate"
-        
-    return False, None
-
-def check_color_balance(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica desequilíbrio de cores para apostas de correção"""
-    if len(history) < 10:  # Mínimo de 10 jogadas para análise
-        return False, None
-        
-    red_count = history.count("🔴")
-    blue_count = history.count("🔵")
-    total = red_count + blue_count
-    
-    if total == 0:
-        return False, None
-        
-    # Se uma cor aparece mais de 70% das vezes
-    if red_count / total > 0.7:
-        return True, "🔵 Correção de desequilíbrio (🔴 dominante)"
-    elif blue_count / total > 0.7:
-        return True, "🔴 Correção de desequilíbrio (🔵 dominante)"
-        
-    return False, None
-
-def check_cluster_patterns(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões de agrupamento de cores"""
-    if len(history) < 8:
-        return False, None
-        
-    # Verifica se as últimas 4 jogadas são da mesma cor
-    last_4 = history[-4:]
-    if len(set(last_4)) == 1 and last_4[0] != "🟡":
-        opposite = get_opposite_color(last_4[0])
-        return True, f"{opposite} Quebrar cluster de 4"
-        
-    # Verifica agrupamentos de 3-1 ou 2-2
-    last_6 = history[-6:]
-    red_count = last_6.count("🔴")
-    blue_count = last_6.count("🔵")
-    
-    if red_count >= 5:
-        return True, "🔵 Cluster extremo de 🔴"
-    elif blue_count >= 5:
-        return True, "🔴 Cluster extremo de 🔵"
-        
-    return False, None
-
-def check_zebra_pattern(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões zebra (alternância perfeita)"""
-    if len(history) < 6:
-        return False, None
-        
-    # Verifica alternância perfeita nos últimos 6 resultados
-    last_6 = history[-6:]
-    zebra_valid = True
-    
-    for i in range(1, len(last_6)):
-        if last_6[i] == last_6[i-1] or last_6[i] == "🟡" or last_6[i-1] == "🟡":
-            zebra_valid = False
-            break
+        for length in STREAK_LENGTHS:
+            if len(recent) < length:
+                continue
+                
+            # Verificar streaks de vermelho
+            if all(c == "🔴" for c in recent[-length:]):
+                confidence = self.pattern_weights['high_streak'] if length >= 4 else self.pattern_weights['medium_streak']
+                patterns.append({
+                    'type': f'streak_red_{length}',
+                    'description': f'Sequência de {length} vermelhos consecutivos',
+                    'suggestion': '🔵',
+                    'confidence': confidence
+                })
             
-    if zebra_valid:
-        # Em zebra, a próxima tende a ser igual à anterior
-        return True, f"{last_6[-2]} Manter zebra"
+            # Verificar streaks de azul
+            if all(c == "🔵" for c in recent[-length:]):
+                confidence = self.pattern_weights['high_streak'] if length >= 4 else self.pattern_weights['medium_streak']
+                patterns.append({
+                    'type': f'streak_blue_{length}',
+                    'description': f'Sequência de {length} azuis consecutivos',
+                    'suggestion': '🔴',
+                    'confidence': confidence
+                })
         
-    return False, None
-
-def check_reversal_pattern(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões de reversão após sequências"""
-    if len(history) < 5:
-        return False, None
-        
-    # Padrão: RRB ou BBR (reversão após dois iguais)
-    if (history[-3] == history[-2] and 
-        history[-2] != history[-1] and 
-        history[-1] != "🟡" and 
-        history[-3] != "🟡"):
-        
-        # Após reversão, tende a continuar a nova cor
-        return True, f"{history[-1]} Continuar reversão"
-        
-    return False, None
-
-def check_mirror_pattern(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões de espelhamento"""
-    if len(history) < 8:
-        return False, None
-        
-    # Verifica se a sequência é um espelho (ex: RRBB RRBB)
-    first_half = history[-8:-4]
-    second_half = history[-4:]
+        return patterns
     
-    if first_half == second_half:
-        next_color = first_half[0] if first_half[0] != "🟡" else first_half[1]
-        return True, f"{next_color} Continuar espelho"
+    def _analyze_repetitions(self, history: List[str]) -> List[Dict]:
+        """Analisa padrões repetitivos"""
+        patterns = []
+        recent = history[-12:]  # Últimas 12 jogadas
         
-    return False, None
-
-def check_gap_patterns(history: List[str]) -> Tuple[bool, Optional[str]]:
-    """Verifica padrões baseados em intervalos entre empates"""
-    if len(history) < 8:
-        return False, None
+        for size in PATTERN_SIZES:
+            if len(recent) < size * 2:
+                continue
+                
+            # Verificar padrões repetidos (ex: 🔴🔵🔴🔵 se repete)
+            first = recent[-(size*2):-size]
+            second = recent[-size:]
+            
+            if first == second:
+                # Determinar próxima cor baseada no padrão
+                next_index = size % len(first)
+                next_color = first[next_index] if first[next_index] != "🟡" else first[0]
+                
+                patterns.append({
+                    'type': f'repetition_{size}',
+                    'description': f'Padrão de {size} cores se repetindo',
+                    'suggestion': next_color,
+                    'confidence': self.pattern_weights['repetition']
+                })
         
-    # Encontra posições dos empates
-    draw_positions = [i for i, x in enumerate(history) if x == "🟡"]
+        return patterns
     
-    if len(draw_positions) < 2:
-        return False, None
+    def _analyze_cycles(self, history: List[str]) -> List[Dict]:
+        """Analisa padrões cíclicos"""
+        patterns = []
+        recent = history[-12:]
         
-    # Calcula intervalos entre empates
-    gaps = [draw_positions[i+1] - draw_positions[i] for i in range(len(draw_positions)-1)]
+        for size in CYCLE_SIZES:
+            if len(recent) < size * 2:
+                continue
+                
+            # Verificar ciclos regulares
+            first = recent[-(size*2):-size]
+            second = recent[-size:]
+            
+            if first == second:
+                next_color = first[0] if first[0] != "🟡" else first[1]
+                patterns.append({
+                    'type': f'cycle_regular_{size}',
+                    'description': f'Ciclo regular de {size} cores',
+                    'suggestion': next_color,
+                    'confidence': self.pattern_weights['cycle']
+                })
+            
+            # Verificar ciclos invertidos
+            if first == list(reversed(second)):
+                next_color = self.get_opposite_color(second[-1]) if second[-1] != "🟡" else "🔴"
+                patterns.append({
+                    'type': f'cycle_inverted_{size}',
+                    'description': f'Ciclo invertido de {size} cores',
+                    'suggestion': next_color,
+                    'confidence': self.pattern_weights['cycle']
+                })
+        
+        return patterns
     
-    # Se os intervalos estão diminuindo
-    if len(gaps) >= 2 and gaps[-1] < gaps[-2]:
-        return True, "🟡 Empate iminente (intervalos diminuindo)"
+    def _analyze_draw_patterns(self, history: List[str]) -> List[Dict]:
+        """Analisa padrões envolvendo empates"""
+        patterns = []
+        recent = history[-8:]
+        draw_positions = [i for i, c in enumerate(recent) if c == "🟡"]
         
-    return False, None
-
-# ==============================
-# Função principal de análise expandida
-# ==============================
-def analyze_patterns(history: List[str]) -> Tuple[List[str], str]:
-    """Analisa o histórico em busca de mais de 40 padrões"""
-    if not history:
-        return [], "Aguardar"
+        if not draw_positions:
+            return patterns
         
-    recent_history = history[-MAX_HISTORY:]
-    patterns_detected = []
-    suggestions = []
+        # Padrão: Empate seguido de tendência
+        if len(recent) >= 3 and recent[-2] == "🟡" and recent[-1] != "🟡":
+            patterns.append({
+                'type': 'draw_followed',
+                'description': 'Empate seguido de cor definida',
+                'suggestion': recent[-1],
+                'confidence': self.pattern_weights['draw_pattern']
+            })
+        
+        # Padrão: Múltiplos empates próximos
+        if len(draw_positions) >= 2:
+            last_draw_gap = draw_positions[-1] - draw_positions[-2]
+            if last_draw_gap <= 2:  # Empates muito próximos
+                patterns.append({
+                    'type': 'draw_cluster',
+                    'description': 'Agrupamento de empates recentes',
+                    'suggestion': self.get_opposite_color(history[-1]) if history[-1] != "🟡" else "🔴",
+                    'confidence': self.pattern_weights['draw_pattern']
+                })
+        
+        return patterns
     
-    # Lista de todas as funções de verificação
-    check_functions = [
-        # Streaks simples (5 padrões)
-        (lambda h: check_streak(h, "🔴", 2), "Streak 🔴 2x"),
-        (lambda h: check_streak(h, "🔵", 2), "Streak 🔵 2x"),
-        (lambda h: check_streak(h, "🔴", 3), "Streak 🔴 3x"),
-        (lambda h: check_streak(h, "🔵", 3), "Streak 🔵 3x"),
-        (lambda h: check_streak(h, "🔴", 4), "Streak 🔴 4x"),
-        (lambda h: check_streak(h, "🔵", 4), "Streak 🔵 4x"),
-        (lambda h: check_streak(h, "🔴", 5), "Streak 🔴 5x"),
-        (lambda h: check_streak(h, "🔵", 5), "Streak 🔵 5x"),
+    def _analyze_statistical(self, history: List[str]) -> List[Dict]:
+        """Análise estatística do histórico"""
+        patterns = []
+        recent = history[-15:]
         
-        # Streaks de qualquer cor (3 padrões)
-        (lambda h: check_streak(h, None, 4), "Streak 4x qualquer cor"),
-        (lambda h: check_streak(h, None, 5), "Streak 5x qualquer cor"),
-        (lambda h: check_streak(h, None, 6), "Streak 6x qualquer cor"),
+        if len(recent) < 10:
+            return patterns
         
-        # Alternância (4 padrões)
-        (lambda h: check_alternation(h, 2), "Alternância 2x2"),
-        (lambda h: check_alternation(h, 3), "Alternância 3x3"),
-        (lambda h: check_alternation(h, 4), "Alternância 4x4"),
-        (lambda h: check_zebra_pattern(h), "Padrão Zebra"),
-        
-        # Padrões repetidos (5 padrões)
-        (lambda h: check_repeat(h, 2), "Repetição 2 cores"),
-        (lambda h: check_repeat(h, 3), "Repetição 3 cores"),
-        (lambda h: check_repeat(h, 4), "Repetição 4 cores"),
-        (lambda h: check_repeat(h, 5), "Repetição 5 cores"),
-        (lambda h: check_mirror_pattern(h), "Padrão Espelho"),
-        
-        # Ciclos (6 padrões)
-        (lambda h: check_cycle_inverted(h, 2), "Ciclo invertido 2"),
-        (lambda h: check_cycle_inverted(h, 3), "Ciclo invertido 3"),
-        (lambda h: check_cycle_inverted(h, 4), "Ciclo invertido 4"),
-        (lambda h: check_cycle_repeated(h, 2), "Ciclo repetido 2"),
-        (lambda h: check_cycle_repeated(h, 3), "Ciclo repetido 3"),
-        (lambda h: check_cycle_repeated(h, 4), "Ciclo repetido 4"),
-        
-        # Padrões de empate (5 padrões)
-        (lambda h: check_draw_patterns(h), "Padrão de empate"),
-        (lambda h: check_gap_patterns(h), "Padrão de intervalo entre empates"),
-        
-        # Padrões avançados (8 padrões)
-        (lambda h: check_color_balance(h), "Desequilíbrio de cores"),
-        (lambda h: check_cluster_patterns(h), "Padrão de cluster"),
-        (lambda h: check_reversal_pattern(h), "Padrão de reversão"),
-        
-        # Adicione mais funções de padrões aqui para atingir 40+
-    ]
-    
-    # Executar todas as verificações
-    for check_func, pattern_name in check_functions:
-        detected, suggestion = check_func(recent_history)
-        if detected:
-            patterns_detected.append(pattern_name)
-            if suggestion:
-                suggestions.append(suggestion)
-    
-    # Adicionar padrões baseados em estatísticas simples
-    if len(recent_history) >= 10:
-        # Padrão: Muitos vermelhos seguidos de azul (e vice-versa)
-        red_count = recent_history.count("🔴")
-        blue_count = recent_history.count("🔵")
+        red_count = recent.count("🔴")
+        blue_count = recent.count("🔵")
         total = red_count + blue_count
         
-        if total > 0:
-            if red_count / total > 0.65:
-                patterns_detected.append("Dominância 🔴")
-                suggestions.append("🔵 Correção estatística")
-            elif blue_count / total > 0.65:
-                patterns_detected.append("Dominância 🔵")
-                suggestions.append("🔴 Correção estatística")
-    
-    # Determinar sugestão final
-    if not suggestions:
-        final_suggestion = "Aguardar"
-    else:
-        # Priorizar sugestões baseadas em streaks longos
-        streak_suggestions = [s for s in suggestions if "streak" in s.lower() or "Streak" in s]
-        if streak_suggestions:
-            # Encontrar a sugestão de streak mais longo
-            longest_streak = 0
-            best_suggestion = streak_suggestions[0]
+        if total == 0:
+            return patterns
+        
+        # Desequilíbrio significativo
+        if red_count / total >= 0.7:
+            patterns.append({
+                'type': 'statistical_imbalance_red',
+                'description': f'Desequilíbrio estatístico: {red_count}🔴 vs {blue_count}🔵',
+                'suggestion': '🔵',
+                'confidence': self.pattern_weights['statistical']
+            })
+        elif blue_count / total >= 0.7:
+            patterns.append({
+                'type': 'statistical_imbalance_blue',
+                'description': f'Desequilíbrio estatístico: {blue_count}🔵 vs {red_count}🔴',
+                'suggestion': '🔴',
+                'confidence': self.pattern_weights['statistical']
+            })
+        
+        # Tendência recente (últimas 5 vs anteriores)
+        if len(recent) >= 10:
+            last_5 = recent[-5:]
+            previous_5 = recent[-10:-5]
             
-            for s in streak_suggestions:
-                numbers = re.findall(r'\d+', s)
-                if numbers:
-                    streak_length = int(numbers[0])
-                    if streak_length > longest_streak:
-                        longest_streak = streak_length
-                        best_suggestion = s
+            last_red = last_5.count("🔴")
+            last_blue = last_5.count("🔵")
+            prev_red = previous_5.count("🔴")
+            prev_blue = previous_5.count("🔵")
             
-            final_suggestion = best_suggestion
-        else:
-            # Se não há streaks, usar a sugestão mais frequente
-            suggestion_count = {}
-            for s in suggestions:
-                suggestion_count[s] = suggestion_count.get(s, 0) + 1
-            
-            if suggestion_count:
-                final_suggestion = max(suggestion_count.items(), key=lambda x: x[1])[0]
-            else:
-                final_suggestion = "Aguardar"
+            # Mudança significativa de tendência
+            if last_red >= 4 and prev_blue >= 3:
+                patterns.append({
+                    'type': 'trend_change_red',
+                    'description': 'Mudança de tendência para vermelho',
+                    'suggestion': '🔴',
+                    'confidence': self.pattern_weights['statistical']
+                })
+            elif last_blue >= 4 and prev_red >= 3:
+                patterns.append({
+                    'type': 'trend_change_blue',
+                    'description': 'Mudança de tendência para azul',
+                    'suggestion': '🔵',
+                    'confidence': self.pattern_weights['statistical']
+                })
         
-    return patterns_detected, final_suggestion
-
-# ==============================
-# Funções auxiliares para interface
-# ==============================
-def display_history(history: List[str]) -> None:
-    """Exibe o histórico de forma formatada"""
-    if not history:
-        st.write("Nenhum resultado inserido ainda.")
-        return
-        
-    reversed_history = list(reversed(history))
+        return patterns
     
-    # Usar colunas para uma exibição mais compacta
-    cols = st.columns(min(12, len(reversed_history)))
-    for idx, result in enumerate(reversed_history):
-        with cols[idx % len(cols)]:
-            st.markdown(f"<h4 style='text-align: center;'>{result}</h4>", unsafe_allow_html=True)
-
-def display_statistics(history: List[str]) -> None:
-    """Exibe estatísticas detalhadas do histórico"""
-    if not history:
-        return
+    def _analyze_clusters(self, history: List[str]) -> List[Dict]:
+        """Analisa agrupamentos de cores"""
+        patterns = []
+        recent = history[-10:]
         
-    red_count = history.count("🔴")
-    blue_count = history.count("🔵")
-    draw_count = history.count("🟡")
-    total = len(history)
+        # Verificar agrupamentos extremos
+        for color in ["🔴", "🔵"]:
+            count = recent.count(color)
+            if count >= 7:  # 70% ou mais de uma cor
+                patterns.append({
+                    'type': f'cluster_{color}',
+                    'description': f'Agrupamento extremo de {color}',
+                    'suggestion': self.get_opposite_color(color),
+                    'confidence': self.pattern_weights['cluster']
+                })
+        
+        return patterns
     
-    st.subheader("📊 Estatísticas Detalhadas")
+    def _analyze_advanced_patterns(self, history: List[str]) -> List[Dict]:
+        """Analisa padrões avançados e complexos"""
+        patterns = []
+        recent = history[-12:]
+        
+        # Padrão Zebra (alternância perfeita)
+        zebra = True
+        for i in range(1, len(recent)):
+            if recent[i] == recent[i-1] or recent[i] == "🟡" or recent[i-1] == "🟡":
+                zebra = False
+                break
+                
+        if zebra and len(recent) >= 4:
+            patterns.append({
+                'type': 'zebra_pattern',
+                'description': 'Padrão zebra (alternância perfeita)',
+                'suggestion': recent[-2],  # Manter a alternância
+                'confidence': self.pattern_weights['zebra']
+            })
+        
+        # Padrão de reversão (ex: 🔴🔴🔵 -> continua 🔵)
+        if len(recent) >= 4:
+            if recent[-3] == recent[-2] and recent[-2] != recent[-1] and recent[-1] != "🟡":
+                patterns.append({
+                    'type': 'reversal_pattern',
+                    'description': 'Padrão de reversão após sequência',
+                    'suggestion': recent[-1],  # Continuar a reversão
+                    'confidence': self.pattern_weights['reversal']
+                })
+        
+        return patterns
     
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("🔴 Vermelho", f"{red_count} ({red_count/total*100:.1f}%)" if total > 0 else "0")
-    with col2:
-        st.metric("🔵 Azul", f"{blue_count} ({blue_count/total*100:.1f}%)" if total > 0 else "0")
-    with col3:
-        st.metric("🟡 Empate", f"{draw_count} ({draw_count/total*100:.1f}%)" if total > 0 else "0")
-    with col4:
-        st.metric("Total", total)
-    
-    # Estatísticas adicionais
-    if total > 5:
-        st.write("**Últimas 10 jogadas:**")
-        last_10 = history[-10:] if len(history) >= 10 else history
-        red_10 = last_10.count("🔴")
-        blue_10 = last_10.count("🔵")
-        draw_10 = last_10.count("🟡")
-        st.write(f"🔴: {red_10} | 🔵: {blue_10} | 🟡: {draw_10}")
+    def generate_recommendation(self, confidence_scores: Dict) -> Tuple[str, float]:
+        """Gera recomendação baseada nas pontuações de confiança"""
+        if not confidence_scores or sum(confidence_scores.values()) == 0:
+            return "Aguardar", 0.0
         
-        # Maior sequência
-        max_streak = 1
-        current_streak = 1
-        prev = history[0]
+        max_score = max(confidence_scores.values())
+        total_score = sum(confidence_scores.values())
         
-        for i in range(1, len(history)):
-            if history[i] == prev and history[i] != "🟡":
-                current_streak += 1
-                max_streak = max(max_streak, current_streak)
-            else:
-                current_streak = 1
-            prev = history[i]
+        if max_score == 0:
+            return "Aguardar", 0.0
         
-        st.write(f"Maior sequência: {max_streak}")
+        # Encontrar a cor com maior pontuação
+        for color, score in confidence_scores.items():
+            if score == max_score:
+                confidence_percentage = (max_score / total_score) * 100
+                return color, confidence_percentage
+        
+        return "Aguardar", 0.0
 
 # ==============================
 # Interface Streamlit melhorada
 # ==============================
 def main():
     st.set_page_config(
-        page_title="Football Studio Analyzer Avançado", 
+        page_title="Football Studio Analyzer Pro", 
         layout="wide",
         page_icon="🎲"
     )
     
-    st.title("🎲 Football Studio Analyzer Avançado")
-    st.write("Análise de mais de 40 padrões do Football Studio com histórico expandido.")
+    st.title("🎲 Football Studio Analyzer Pro")
+    st.write("Sistema avançado de análise de padrões em tempo real para Football Studio")
+    
+    # Inicializar analisador
+    if "analyzer" not in st.session_state:
+        st.session_state.analyzer = FootballStudioAnalyzer()
     
     # Inicializar histórico
     if "history" not in st.session_state:
         st.session_state.history = deque(maxlen=MAX_HISTORY)
     
+    # Inicializar estatísticas
+    if "pattern_stats" not in st.session_state:
+        st.session_state.pattern_stats = {
+            "🔴": 0, "🔵": 0, "🟡": 0,
+            "total_analyzed": 0,
+            "last_analysis": None
+        }
+    
     # Sidebar para controles
     with st.sidebar:
-        st.header("Controles")
+        st.header("⚙️ Controles")
         
-        if st.button("📊 Mostrar Estatísticas Detalhadas"):
-            st.session_state.show_stats = not st.session_state.get('show_stats', False)
+        # Entrada rápida de resultados
+        st.subheader("Entrada Rápida")
+        sequence_input = st.text_input("Digite uma sequência (ex: 🔴🔵🟡🔴):", "")
+        if st.button("Adicionar Sequência") and sequence_input:
+            # Extrair emojis válidos
+            emojis = re.findall(r'[🔴🔵🟡]', sequence_input)
+            for emoji in emojis:
+                st.session_state.history.append(emoji)
+            st.success(f"{len(emojis)} resultados adicionados!")
+            st.rerun()
         
+        # Controles de histórico
+        st.subheader("Gerenciamento de Histórico")
         if st.button("🗑️ Limpar Histórico", type="secondary"):
             st.session_state.history.clear()
             st.success("Histórico limpo!")
@@ -443,109 +388,128 @@ def main():
             st.session_state.history.pop()
             st.success("Último resultado removido!")
             st.rerun()
-            
-        st.header("Adicionar Múltiplos Resultados")
-        multi_input = st.text_input("Sequência (ex: 🔴🔵🟡🔴)", "")
-        if st.button("Adicionar Sequência") and multi_input:
-            # Extrai emojis do texto
-            emojis = re.findall(r'[🔴🔵🟡]', multi_input)
-            for emoji in emojis:
-                st.session_state.history.append(emoji)
-            st.success(f"{len(emojis)} resultados adicionados!")
-            st.rerun()
+        
+        # Configurações de análise
+        st.subheader("Configurações de Análise")
+        analysis_depth = st.slider("Profundidade de Análise", 5, 30, 15, 
+                                  help="Quantidade de jogadas anteriores a serem analisadas")
     
-    # Botões de entrada principais
-    st.subheader("Registrar Resultado")
-    col1, col2, col3 = st.columns(3)
+    # Layout principal
+    col1, col2 = st.columns([1, 2])
+    
     with col1:
-        if st.button("🔴 Vermelho", use_container_width=True, key="red_btn"):
-            st.session_state.history.append("🔴")
-            st.rerun()
+        st.subheader("🎯 Registrar Resultado")
+        
+        # Botões de entrada
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            if st.button("🔴", use_container_width=True, key="red_btn"):
+                st.session_state.history.append("🔴")
+                st.rerun()
+        with btn_col2:
+            if st.button("🔵", use_container_width=True, key="blue_btn"):
+                st.session_state.history.append("🔵")
+                st.rerun()
+        with btn_col3:
+            if st.button("🟡", use_container_width=True, key="draw_btn"):
+                st.session_state.history.append("🟡")
+                st.rerun()
+        
+        # Exibir histórico
+        st.subheader("📜 Histórico Recente")
+        if st.session_state.history:
+            # Mostrar histórico com os mais recentes primeiro
+            reversed_history = list(reversed(st.session_state.history))
+            cols = st.columns(min(10, len(reversed_history)))
+            for idx, result in enumerate(reversed_history):
+                with cols[idx % len(cols)]:
+                    st.markdown(f"<h3 style='text-align: center;'>{result}</h3>", 
+                               unsafe_allow_html=True)
+        else:
+            st.info("Nenhum resultado registrado ainda.")
+        
+        # Estatísticas simples
+        if st.session_state.history:
+            st.subheader("📊 Estatísticas Básicas")
+            red_count = list(st.session_state.history).count("🔴")
+            blue_count = list(st.session_state.history).count("🔵")
+            draw_count = list(st.session_state.history).count("🟡")
+            total = len(st.session_state.history)
+            
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            with col_stat1:
+                st.metric("🔴 Vermelho", f"{red_count} ({red_count/total*100:.1f}%)")
+            with col_stat2:
+                st.metric("🔵 Azul", f"{blue_count} ({blue_count/total*100:.1f}%)")
+            with col_stat3:
+                st.metric("🟡 Empate", f"{draw_count} ({draw_count/total*100:.1f}%)")
+    
     with col2:
-        if st.button("🔵 Azul", use_container_width=True, key="blue_btn"):
-            st.session_state.history.append("🔵")
-            st.rerun()
-    with col3:
-        if st.button("🟡 Empate", use_container_width=True, key="draw_btn"):
-            st.session_state.history.append("🟡")
-            st.rerun()
-    
-    # Exibir histórico
-    st.subheader("📜 Histórico (mais recente primeiro)")
-    display_history(st.session_state.history)
-    
-    # Exibir estatísticas se solicitado
-    if st.session_state.get('show_stats', False):
-        display_statistics(st.session_state.history)
-    
-    # Análise de padrões
-    st.subheader("🤖 Análise de Padrões")
-    patterns_detected, suggestion = analyze_patterns(st.session_state.history)
-    
-    if patterns_detected:
-        st.write(f"**{len(patterns_detected)} Padrões Detectados:**")
+        st.subheader("🤖 Análise de Padrões em Tempo Real")
         
-        # Agrupar padrões por categoria
-        categories = {
-            "Streaks": [],
-            "Alternância": [],
-            "Repetição": [],
-            "Ciclos": [],
-            "Empates": [],
-            "Estatísticos": [],
-            "Outros": []
-        }
-        
-        for pattern in patterns_detected:
-            if "streak" in pattern.lower() or "Streak" in pattern:
-                categories["Streaks"].append(pattern)
-            elif "Altern" in pattern or "Zebra" in pattern:
-                categories["Alternância"].append(pattern)
-            elif "Repet" in pattern or "Espelho" in pattern:
-                categories["Repetição"].append(pattern)
-            elif "Ciclo" in pattern:
-                categories["Ciclos"].append(pattern)
-            elif "empate" in pattern.lower() or "Empate" in pattern:
-                categories["Empates"].append(pattern)
-            elif "Estat" in pattern or "Dominância" in pattern or "Cluster" in pattern:
-                categories["Estatísticos"].append(pattern)
+        if len(st.session_state.history) >= 5:
+            # Realizar análise
+            patterns, confidence_scores = st.session_state.analyzer.detect_all_patterns(
+                list(st.session_state.history)[-analysis_depth:]
+            )
+            
+            # Gerar recomendação
+            recommendation, confidence = st.session_state.analyzer.generate_recommendation(confidence_scores)
+            
+            # Exibir recomendação principal
+            st.subheader("💡 Recomendação de Entrada")
+            
+            # Destacar a recomendação com base na confiança
+            if confidence > 60:
+                st.success(f"## {recommendation} (Confiança: {confidence:.1f}%)")
+                st.write("**Alta confiança nesta recomendação**")
+            elif confidence > 30:
+                st.info(f"## {recommendation} (Confiança: {confidence:.1f}%)")
+                st.write("**Confiança moderada nesta recomendação**")
             else:
-                categories["Outros"].append(pattern)
-        
-        # Exibir padrões por categoria
-        for category, patterns in categories.items():
+                st.warning(f"## {recommendation} (Confiança: {confidence:.1f}%)")
+                st.write("**Baixa confiança - aguardar padrão mais claro**")
+            
+            # Exibir padrões detectados
+            st.subheader("🔍 Padrões Detectados")
             if patterns:
-                with st.expander(f"{category} ({len(patterns)})"):
-                    for pattern in patterns:
-                        st.write(f"- {pattern}")
-    else:
-        st.info("Nenhum padrão detectado. Continue adicionando resultados.")
-    
-    # Sugestão com destaque visual
-    st.subheader("💡 Sugestão de Entrada")
-    
-    if suggestion == "Aguardar":
-        st.warning(f"## {suggestion}")
-    elif "🔴" in suggestion:
-        st.error(f"## {suggestion}")
-    elif "🔵" in suggestion:
-        st.info(f"## {suggestion}")
-    elif "🟡" in suggestion:
-        st.warning(f"## {suggestion}")
-    else:
-        st.success(f"## {suggestion}")
+                # Agrupar padrões por tipo
+                pattern_categories = {}
+                for pattern in patterns:
+                    category = pattern['type'].split('_')[0]
+                    if category not in pattern_categories:
+                        pattern_categories[category] = []
+                    pattern_categories[category].append(pattern)
+                
+                # Exibir padrões por categoria
+                for category, items in pattern_categories.items():
+                    with st.expander(f"{category.title()} ({len(items)} padrões)"):
+                        for pattern in items:
+                            st.write(f"**{pattern['description']}**")
+                            st.write(f"Sugestão: {pattern['suggestion']} | Confiança: {pattern['confidence']}")
+            else:
+                st.info("Nenhum padrão significativo detectado. Continue registrando resultados.")
+            
+            # Exibir pontuações de confiança
+            st.subheader("📈 Pontuações de Confiança")
+            col_conf1, col_conf2, col_conf3 = st.columns(3)
+            with col_conf1:
+                st.metric("🔴 Vermelho", f"{confidence_scores.get('🔴', 0):.1f}")
+            with col_conf2:
+                st.metric("🔵 Azul", f"{confidence_scores.get('🔵', 0):.1f}")
+            with col_conf3:
+                st.metric("🟡 Empate", f"{confidence_scores.get('🟡', 0):.1f}")
         
-    # Explicação da sugestão
-    if suggestion != "Aguardar":
-        st.write("**Lógica por trás da sugestão:**")
-        if "streak" in suggestion.lower():
-            st.write("Streaks longos tendem a se quebrar, sugerindo a cor oposta.")
-        elif "Altern" in suggestion:
-            st.write("Padrões de alternância tendem a continuar seguindo a sequência.")
-        elif "Correção" in suggestion:
-            st.write("Desequilíbrios estatísticos tendem a se corrigir com o tempo.")
-        elif "empate" in suggestion.lower():
-            st.write("Padrões de empate seguem comportamentos específicos.")
+        else:
+            st.info("Registre pelo menos 5 resultados para ativar a análise de padrões.")
+    
+    # Rodapé com informações adicionais
+    st.divider()
+    st.write("""
+    **Sobre o sistema:** Este analisador verifica mais de 40 padrões diferentes em tempo real, 
+    adaptando-se dinamicamente ao histórico de resultados. Quanto mais dados disponíveis, 
+    mais precisas se tornam as recomendações.
+    """)
 
 if __name__ == "__main__":
     main()
