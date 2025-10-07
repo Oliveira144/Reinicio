@@ -1,12 +1,12 @@
 import streamlit as st
 
-# Função para atualizar o histórico com nova entrada manual
+# Função para atualizar o histórico - adiciona o novo valor no início da lista
 def update_history(new_value):
     if len(st.session_state.history) >= 9:
-        st.session_state.history.pop(0)
-    st.session_state.history.append(new_value)
+        st.session_state.history.pop()  # remove o último item (mais antigo)
+    st.session_state.history.insert(0, new_value)  # insere o mais recente no início
 
-# Contar alternâncias no histórico
+# Contar alternâncias
 def count_alternations(history):
     count = 0
     for i in range(len(history)-1):
@@ -14,12 +14,12 @@ def count_alternations(history):
             count += 1
     return count
 
-# Detectar padrão Surf (mínimo 3 alternâncias consecutivas)
+# Detectar padrão Surf
 def detect_surf_pattern(history):
     alternacao = count_alternations(history)
     return alternacao >= 3
 
-# Contar repetições consecutivas no histórico
+# Contar repetições consecutivas
 def count_consecutive_repetitions(history):
     count = 1
     max_count = 1
@@ -31,7 +31,7 @@ def count_consecutive_repetitions(history):
             count = 1
     return max_count
 
-# Cálculo do nível de manipulação (1 a 9) baseado nas regras fornecidas
+# Calcular nível de manipulação
 def calculate_manipulation_level(history):
     level = 1
     alternacoes = count_alternations(history)
@@ -39,37 +39,37 @@ def calculate_manipulation_level(history):
     max_reps = count_consecutive_repetitions(history)
 
     if alternacoes <= 2 and draws == 0:
-        level = 1  # Natural / aleatório
+        level = 1
     elif draws <= 2 and max_reps <= 2:
-        level = 3  # Controle leve
+        level = 3
     elif alternacoes >= 4 and draws >= 1:
-        level = 5  # Manipulação média
+        level = 5
     elif max_reps >= 3:
-        level = 7  # Manipulação profunda
+        level = 7
     elif max_reps >= 4 or draws >= 3:
-        level = 9  # Manipulação quântica
+        level = 9
     return level
 
-# Previsão da próxima jogada baseada no padrão atual e nível de manipulação
+# Previsão para próxima jogada
 def predict_next(history, manipulation_level):
-    last = history[-1] if history else None
+    last = history[0] if history else None  # o mais recente agora é o índice 0
     prediction = {'🔴': 0, '🔵': 0, '🟡': 0}
 
     if manipulation_level <= 2:
         prediction = {'🔴': 33, '🔵': 33, '🟡': 34}
     elif manipulation_level <= 4:
-        if len(history) >= 2 and history[-1] != history[-2]:
-            prediction[history[-1]] = 30
-            prediction[history[-2]] = 50
+        if len(history) >= 2 and history[0] != history[1]:
+            prediction[history[0]] = 30
+            prediction[history[1]] = 50
             prediction['🟡'] = 20
         else:
             prediction = {'🔴': 40, '🔵': 40, '🟡': 20}
     elif manipulation_level <= 6:
         if last == '🟡' and len(history) >= 2:
-            prediction[history[-2]] = 70
+            prediction[history[1]] = 70
             prediction['🟡'] = 10
             for k in prediction:
-                if k != history[-2]:
+                if k != history[1]:
                     prediction[k] = 10
         else:
             prediction[last] = 70
@@ -86,7 +86,7 @@ def predict_next(history, manipulation_level):
 
     return prediction
 
-# Geração do sinal de alerta conforme nível de manipulação
+# Alerta conforme nível
 def alert_signal(level):
     if 4 <= level <= 6:
         return '🟢 Brecha Detectada'
@@ -97,17 +97,17 @@ def alert_signal(level):
     else:
         return '🟢 Normal'
 
-# Sugestão de aposta inteligente conforme padrões e manipulação
+# Sugestão de aposta
 def suggest_bet(history, level):
     if len(history) < 2:
         return 'Aguardando mais dados'
 
     if detect_surf_pattern(history):
-        last = history[-1]
+        last = history[0]
         return f'Apostar na repetição da última cor: {last}'
 
-    if '🟡' in history[-3:]:
-        last_color = history[-1]
+    if '🟡' in history[:3]:
+        last_color = history[0]
         if last_color != '🟡':
             return f'Apostar no oposto da última cor: {"🔴" if last_color == "🔵" else "🔵"}'
 
@@ -124,19 +124,23 @@ def suggest_bet(history, level):
 
     return 'Sem sugestão clara'
 
-# Inicialização do histórico no estado da sessão
+# Inicializar histórico
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# Interface Streamlit
+# Interface
 st.title('Football Studio - Padrão Surf Inteligente')
 
-st.sidebar.header('Registrar novo resultado')
-new_result = st.sidebar.radio('Selecione o resultado:', ('🔴', '🔵', '🟡'))
-if st.sidebar.button('Atualizar histórico'):
-    update_history(new_result)
+st.sidebar.header('Clique para adicionar novo resultado')
+col1, col2, col3 = st.sidebar.columns(3)
+if col1.button('🔴'):
+    update_history('🔴')
+if col2.button('🔵'):
+    update_history('🔵')
+if col3.button('🟡'):
+    update_history('🟡')
 
-st.subheader('Histórico dos últimos resultados')
+st.subheader('Histórico dos últimos 9 resultados (mais recente à esquerda)')
 st.write(' '.join(st.session_state.history))
 
 level = calculate_manipulation_level(st.session_state.history)
