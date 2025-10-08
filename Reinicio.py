@@ -221,9 +221,69 @@ def suggest_bet(pattern, history):
     if pattern == 'Insuficientes dados':
         return 'Insuficientes dados para análise'
 
-    # A partir da descrição da detecção, pode-se aprimorar aqui conforme necessidade
-    # Para simplicidade, aproveita as estratégias descritas nos padrões
-    return pattern
+    last = history[0]
+    second = history[1] if len(history) > 1 else None
+
+    # Estratégias específicas por padrão
+    if pattern == 'Surf 🌊':
+        # Após 4 alternâncias, apostar na repetição da última cor
+        if '🟡' in history[:3]:
+            # Após empate, apostar na inversão
+            opposite = '🔴' if last == '🔵' else '🔵'
+            return f'Apostar na inversão após empate: {opposite}'
+        else:
+            return f'Apostar na repetição da última cor: {last}'
+
+    if pattern == 'Ping-Pong 🏓':
+        if '🟡' in history[:3]:
+            opposite = '🔴' if last == '🔵' else '🔵'
+            return f'Após empate, apostar na inversão: {opposite}'
+        else:
+            return f'Apostar na repetição da última cor: {last}'
+
+    if pattern == 'Alternância Suja 🔁':
+        # Apostar na alternância: cor oposta à última
+        opposite = '🔴' if last == '🔵' else '🔵'
+        return f'Apostar na alternância: {opposite}'
+
+    if pattern == 'Zig-Zag ⚡':
+        # Apostar na inversão após duplas
+        opposite = '🔴' if last == '🔵' else '🔵'
+        return f'Apostar na inversão após dupla: {opposite}'
+
+    if pattern.startswith('2x2'):
+        opposite = '🔴' if last == '🔵' else '🔵'
+        return f'Apostar no lado oposto após segunda dupla: {opposite}'
+
+    if pattern.startswith('3x3'):
+        opposite = '🔴' if last == '🔵' else '🔵'
+        if '🟡' in history[:3]:
+            return f'Após empate, inverter e reduzir aposta: {opposite}'
+        else:
+            return f'Apostar na inversão após 2 triplas: {opposite}'
+
+    if pattern == 'Espelhado 🪞':
+        return f'Repetir metade anterior; aposta provável: {last}'
+
+    if pattern == 'Colapso / Reverso Quântico 🌀':
+        return 'Não apostar; aguardar retomada de padrão limpo.'
+
+    if pattern == 'Âncora (Empate) ⚓':
+        if '🟡' in history[:2]:
+            # Se segundo empate dentro de 5 jogadas
+            if len(history) > 2 and history[2] == history[0]:
+                return f'Apostar no mesmo lado do primeiro após empate: {last}'
+            else:
+                opposite = '🔴' if last == '🔵' else '🔵'
+                return f'Após empate, apostar no oposto: {opposite}'
+        else:
+            opposite = '🔴' if last == '🔵' else '🔵'
+            return f'Após empate, apostar no oposto: {opposite}'
+
+    if pattern == 'Camuflado 🕵️‍♂️':
+        return 'Apostar somente após confirmação de blocos limpos.'
+
+    return 'Sem sugestão clara para aposta.'
 
 # --- Inicializar estado ---
 if 'history' not in st.session_state:
