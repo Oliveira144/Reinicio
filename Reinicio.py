@@ -167,7 +167,15 @@ def calculate_manipulation_level(history):
         return 9  # Manipulação quântica
     return 4  # Default intermediário
 
-# --- Previsão de próxima jogada com estratégia por padrão ---
+# --- Previsão da próxima jogada com normalização segura ---
+def normalize_prediction(pred_raw):
+    keys = ['🔴', '🔵', '🟡']
+    total = sum(pred_raw.get(k, 0) for k in keys)
+    if total == 0:
+        # Distribuir igualmente em caso de erro
+        return {k: 33 for k in keys}
+    return {k: round(pred_raw.get(k, 0) / total * 100) for k in keys}
+
 def predict_next(history, manipulation_level, pattern):
     if not history:
         return {'🔴': 33, '🔵': 33, '🟡': 34}
@@ -222,65 +230,58 @@ def alert_signal(level):
     else:
         return '🟢 Normal'
 
-# --- Recomendações detalhadas para apostas ---
+# --- Sugestões diretas para apostas ---
 def suggest_bet(pattern, history):
     if not history or len(history) < 2:
-        return 'Aguardando mais dados para recomendação'
+        return 'Aguardando mais dados.'
 
     if pattern == 'Insuficientes dados':
-        return 'Insuficientes dados para análise'
+        return 'Dados insuficientes.'
 
     last = history[0]
+    opposite = '🔴' if last == '🔵' else '🔵'
 
     if pattern == 'Surf 🌊':
         if '🟡' in history[:3]:
-            opposite = '🔴' if last == '🔵' else '🔵'
-            return f'Apostar na inversão após empate: {opposite}'
-        return f'Apostar na repetição da última cor: {last}'
+            return f'Aposte na inversão: {opposite}'
+        return f'Aposte na última cor: {last}'
 
     if pattern == 'Ping-Pong 🏓':
         if '🟡' in history[:3]:
-            opposite = '🔴' if last == '🔵' else '🔵'
-            return f'Após empate, apostar na inversão: {opposite}'
-        return f'Apostar na repetição da última cor: {last}'
+            return f'Aposte na inversão: {opposite}'
+        return f'Aposte na última cor: {last}'
 
     if pattern == 'Alternância Suja 🔁':
-        opposite = '🔴' if last == '🔵' else '🔵'
-        return f'Apostar na alternância: {opposite}'
+        return f'Aposte na alternância: {opposite}'
 
     if pattern == 'Zig-Zag ⚡':
-        opposite = '🔴' if last == '🔵' else '🔵'
-        return f'Apostar na inversão após dupla: {opposite}'
+        return f'Aposte na inversão após dupla: {opposite}'
 
     if pattern.startswith('2x2'):
-        opposite = '🔴' if last == '🔵' else '🔵'
-        return f'Apostar no lado oposto após segunda dupla: {opposite}'
+        return f'Aposte no lado oposto após segunda dupla: {opposite}'
 
     if pattern.startswith('3x3'):
-        opposite = '🔴' if last == '🔵' else '🔵'
         if '🟡' in history[:3]:
-            return f'Após empate, inverter e reduzir aposta: {opposite}'
-        return f'Apostar na inversão após 2 triplas: {opposite}'
+            return f'Após empate, inverta e reduza aposta: {opposite}'
+        return f'Aposte na inversão após 2 triplas: {opposite}'
 
     if pattern == 'Espelhado 🪞':
-        return f'Repetir metade anterior; aposta provável: {last}'
+        return f'Repita metade anterior: {last}'
 
     if pattern == 'Colapso / Reverso Quântico 🌀':
-        return 'Não apostar; aguardar retomada de padrão limpo.'
+        return 'Não apostar; aguarde padrão limpo.'
 
     if pattern == 'Âncora (Empate) ⚓':
         if '🟡' in history[:2]:
-            if len(history) > 2 and history[2] == history[0]:
-                return f'Apostar no mesmo lado do primeiro após empate: {last}'
-            opposite = '🔴' if last == '🔵' else '🔵'
-            return f'Após empate, apostar no oposto: {opposite}'
-        opposite = '🔴' if last == '🔵' else '🔵'
-        return f'Após empate, apostar no oposto: {opposite}'
+            if len(history) > 2 and history[2] == last:
+                return f'Aposte no mesmo lado após empate: {last}'
+            return f'Aposte na inversão: {opposite}'
+        return f'Aposte na inversão: {opposite}'
 
     if pattern == 'Camuflado 🕵️‍♂️':
-        return 'Apostar somente após confirmação de blocos limpos.'
+        return 'Aposte após confirmação de blocos limpos.'
 
-    return 'Sem sugestão clara para aposta.'
+    return 'Sem sugestão clara.'
 
 # --- Inicialização do estado do Streamlit ---
 if 'history' not in st.session_state:
@@ -308,9 +309,8 @@ pattern, strategy = detect_pattern(st.session_state.history)
 level = calculate_manipulation_level(st.session_state.history)
 prediction_raw = predict_next(st.session_state.history, level, pattern)
 
-# Normalizar previsão para porcentagem
-total_pred = sum(prediction_raw.values())
-prediction = {k: round(v / total_pred * 100) for k, v in prediction_raw.items()}
+# Normalizar previsão para porcentagem com segurança de chaves
+prediction = normalize_prediction(prediction_raw)
 
 alert_msg = alert_signal(level)
 bet_recommendation = suggest_bet(pattern, st.session_state.history)
