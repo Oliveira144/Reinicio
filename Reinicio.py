@@ -1,16 +1,15 @@
 import streamlit as st
 
-# --- Histórico com limite até 9 resultados ---
+# --- Atualização e limpeza do histórico ---
 def update_history(new_value):
     if len(st.session_state.history) >= 9:
         st.session_state.history.pop()  # remove o resultado mais antigo
-    st.session_state.history.insert(0, new_value)  # insere o novo resultado no início
+    st.session_state.history.insert(0, new_value)  # insere o mais recente no início
 
-# --- Função para limpar histórico ---
 def clear_history():
     st.session_state.history = []
 
-# --- Contagens e análise - melhorias na lógica ---
+# --- Análise de padrões básicos ---
 def count_alternations(history):
     count = 0
     for i in range(len(history) - 1):
@@ -56,8 +55,8 @@ def is_mirror_pattern(history):
     for i in range(mid):
         left = history[i]
         right = history[n - 1 - i]
-        if left == '🟡' or right == '🟡':  # ignora empates
-            continue
+        if left == '🟡' or right == '🟡':
+            continue  # ignora empates
         if left != right:
             return False
     return True
@@ -66,14 +65,14 @@ def contains_draw_in_last_n(history, n):
     return '🟡' in history[:n]
 
 def detect_zigzag_break(history):
-    # Detecta um padrão tipo zigzag com pequenas quebras ou trocas
+    # Detecta zig-zag com reversões duplas camufladas
     for i in range(len(history) - 3):
         segment = history[i:i + 4]
         if segment[0] == segment[2] and segment[1] == segment[3] and segment[0] != segment[1] and '🟡' not in segment:
             return True
     return False
 
-# --- Detecção dos padrões com melhorias ---
+# --- Detecção e interpretação do padrão conforme sistema unificado ---
 def detect_pattern(history):
     if len(history) < 4:
         return 'Insuficientes dados', None
@@ -86,56 +85,69 @@ def detect_pattern(history):
     draws = history.count('🟡')
     zigzag_break = detect_zigzag_break(history)
 
-    # Melhores padrões com base em análise prática do Football Studio
-    # Padrão Surf com pico de repetição e alternância forte
+    # 1. PADRÃO SURF — Onda Controlada
     if alternations >= 4 and max_reps <= 2 and not contains_draw_in_last_n(history, 3):
+        # Pico da onda na 5ª ou 6ª alternância com repetição last color
         if len(history) >= 6 and history[4] == history[5]:
-            return 'Surf 🌊', 'Após 4 alternâncias, apostar na repetição da última cor; após empate inverter'
-        return 'Surf 🌊', 'Apostar na repetição da última cor após 4 alternâncias'
+            return ('Surf 🌊',
+                "Ciclo de 4 a 8 alternâncias, pico na 5ª-6ª em repetição. Após empate 🟡, apostar inversão (lado oposto).")
+        return ('Surf 🌊',
+            "Alternância suave, após 4 alternâncias apostar repetição da última cor.")
 
-    # Padrão Ping-Pong: alternância limpa e regular
+    # 2. PADRÃO PING-PONG — Alternância Perfeita
     if 3 <= alternations <= 6 and max_reps == 1:
         if contains_draw_in_last_n(history, 3):
-            return 'Ping-Pong 🏓', 'Após empate, indica inversão. Apostar repetição antes do empate.'
-        return 'Ping-Pong 🏓', 'Alternância consistente; preparar para quebra'
+            return ('Ping-Pong 🏓',
+                "Alternância limpa, após empate apostar inversão. Na 5ª jogada apostar repetição da última cor.")
+        return ('Ping-Pong 🏓',
+            "Alternância direta e limpa; preparar para quebra após 3+ alternâncias.")
 
-    # Alternância suja com duplas e pequenas quebras
+    # 3. PADRÃO ALTERNÂNCIA SUJA — Alternância com micro-repetições
     if doubles >= 1 and max_reps == 2:
-        return 'Alternância Suja 🔁', 'Após duplas, tendência a retornar à alternância; após 2 duplas seguidas, inversão provável'
+        return ('Alternância Suja 🔁',
+            "Duplas indicam microquebras. Após dupla apostar alternância (cor oposta). Após duas duplas seguidas, preparar inversão.")
 
-    # Detecta padrão Zig-Zag aprimorado (com pequenas quebras)
+    # 4. PADRÃO ZIG-ZAG — Alternância camuflada
     if zigzag_break and doubles >= 1 and max_reps >= 2 and draws <= 1 and len(history) >= 6:
-        return 'Zig-Zag ⚡', 'Após dupla inversa apostar na inversão; após empate, voltar ao lado anterior'
+        return ('Zig-Zag ⚡',
+            "Simula alternância com reversões duplas. Apostar inversão após dupla; após empate apostar lado anterior ao empate.")
 
-    # Detecta duplas em sequência (2x2)
+    # 5. PADRÃO 2x2 — Duplas Alternadas
     if doubles >= 2:
         if doubles >= 3:
-            return '2x2 (Duplas) 🟦', 'Após 2ª dupla preparar inversão; após 3 blocos apostar lado oposto'
-        return '2x2 (Duplas) 🟦', 'Ciclo de duplas em andamento'
+            return ('2x2 (Duplas) 🟦',
+                "Ciclo de 3 a 4 blocos. Após 3ª dupla, apostar inversão total.")
+        return ('2x2 (Duplas) 🟦',
+            "Duplas alternadas em ciclo. Após 2ª dupla preparar inversão.")
 
-    # Detecta triplas em sequência (3x3)
+    # 6. PADRÃO 3x3 — Triplas Alternadas
     if triples >= 2:
-        return '3x3 (Triplas) 🔺', 'Após 2 triplas apostar na inversão; após empate inverter e reduzir aposta'
+        return ('3x3 (Triplas) 🔺',
+            "Triplas alternadas. Após 2ª tripla apostar lado oposto. Se empate, apostar valor reduzido.")
 
-    # Padrão espelhado (mirror)
+    # 7. PADRÃO ESPELHADO (MIRROR)
     if mirror:
-        return 'Espelhado 🪞', 'Identifique centro e aposte na repetição da metade anterior'
+        return ('Espelhado 🪞',
+            "Sequência refletida. Após centro da simetria apostar repetição da metade anterior.")
 
-    # Colapso / Reverso Quântico (complexidade alta)
+    # 8. PADRÃO COLAPSO (OU CAOS QUÂNTICO)
     if draws >= 1 and doubles >= 2 and alternations >= 1:
-        return 'Colapso / Reverso Quântico 🌀', 'Não apostar até reinício limpo; empate indica reinício do ciclo'
+        return ('Colapso / Reverso Quântico 🌀',
+            "Padrão irregular e caótico. Evitar apostas. Reentrar após ciclo limpo.")
 
-    # Âncora (empate)
+    # 9. PADRÃO ÂNCORA — Empate como ponto de controle
     if contains_draw_in_last_n(history, 1):
-        return 'Âncora (Empate) ⚓', 'Após empate apostar no oposto; se repetir empate, apostar na mesma cor do primeiro'
+        return ('Âncora (Empate) ⚓',
+            "Após empate apostar no lado oposto da última cor. Se novo empate ocorrer, inverter aposta novamente.")
 
-    # Camuflado - mistura complexa
-    if draws >= 2 and doubles >=1 and triples >= 1:
-        return 'Camuflado 🕵️‍♂️', 'Apostar somente após confirmação de blocos limpos'
+    # 10. PADRÃO CAMUFLADO — Mistura de manipulações
+    if draws >= 2 and doubles >= 1 and triples >= 1:
+        return ('Camuflado 🕵️‍♂️',
+            "Mistura de padrões. Apostar somente após confirmação de 2 blocos coerentes limpos.")
 
-    return 'Padrão Desconhecido', 'Sem sugestão clara'
+    return ('Padrão Desconhecido', 'Sem sugestão clara')
 
-# --- Nível de manipulação refinado ---
+# --- Nível de manipulação ---
 def calculate_manipulation_level(history):
     alternations = count_alternations(history)
     draws = history.count('🟡')
@@ -143,7 +155,6 @@ def calculate_manipulation_level(history):
     doubles = find_doubles_blocks(history)
     triples = find_triples_blocks(history)
 
-    # Considera mais fatores e distribui níveis com base em estudos de padrões
     if alternations <= 2 and draws == 0 and max_reps <= 2:
         return 1  # Natural / aleatório
     elif draws <= 2 and max_reps <= 2 and doubles <= 1:
@@ -154,19 +165,16 @@ def calculate_manipulation_level(history):
         return 7  # Manipulação profunda
     elif triples >= 2 or draws >= 3 or doubles >= 4:
         return 9  # Manipulação quântica
-    return 4  # Default estimado intermediário
+    return 4  # Default intermediário
 
-# --- Previsão de próxima jogada com distribuição refinada ---
+# --- Previsão de próxima jogada com estratégia por padrão ---
 def predict_next(history, manipulation_level, pattern):
     if not history:
         return {'🔴': 33, '🔵': 33, '🟡': 34}
 
     last = history[0]
-
-    # Definir inverso
     inverse = '🔴' if last == '🔵' else '🔵'
 
-    # Estratégias baseadas em padrão detectado
     if pattern.startswith('Surf'):
         if contains_draw_in_last_n(history, 1) and len(history) > 1:
             return {history[1]: 70, '🟡': 10, last: 20}
@@ -203,7 +211,7 @@ def predict_next(history, manipulation_level, pattern):
 
     return {'🔴': 33, '🔵': 33, '🟡': 34}
 
-# --- Geração de sinal visual de alerta ---
+# --- Gerar sinal visual de alerta conforme nível ---
 def alert_signal(level):
     if 4 <= level <= 6:
         return '🟢 Brecha Detectada'
@@ -214,7 +222,7 @@ def alert_signal(level):
     else:
         return '🟢 Normal'
 
-# --- Sugestão de aposta detalhada ---
+# --- Recomendações detalhadas para apostas ---
 def suggest_bet(pattern, history):
     if not history or len(history) < 2:
         return 'Aguardando mais dados para recomendação'
@@ -274,12 +282,12 @@ def suggest_bet(pattern, history):
 
     return 'Sem sugestão clara para aposta.'
 
-# --- Inicialização do estado ---
+# --- Inicialização do estado do Streamlit ---
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# --- Interface Streamlit ---
-st.title('Football Studio - Leitura Avançada de Padrões')
+# --- Interface ---
+st.title('Football Studio - Sistema Unificado de Padrões (Cartas Físicas)')
 
 st.sidebar.header('Registrar novo resultado (mais recente à esquerda)')
 cols = st.sidebar.columns(4)
@@ -295,25 +303,26 @@ if cols[3].button('Limpar Histórico'):
 st.subheader('Histórico (mais recente → mais antigo):')
 st.write(' '.join(st.session_state.history))
 
-# Detecção de padrão e manipulação
+# Detectar padrão e nível de manipulação
 pattern, strategy = detect_pattern(st.session_state.history)
 level = calculate_manipulation_level(st.session_state.history)
 prediction_raw = predict_next(st.session_state.history, level, pattern)
 
-# Normalizar predição
+# Normalizar previsão para porcentagem
 total_pred = sum(prediction_raw.values())
 prediction = {k: round(v / total_pred * 100) for k, v in prediction_raw.items()}
 
 alert_msg = alert_signal(level)
 bet_recommendation = suggest_bet(pattern, st.session_state.history)
 
+# Exibir resultados
 st.subheader('Resumo da Análise')
 st.markdown(f"- **Padrão Detectado:** {pattern}")
-st.markdown(f"- **Descrição / Estratégia:** {strategy}")
+st.markdown(f"- **Descrição do Padrão / Estratégia:** {strategy}")
 st.markdown(f"- **Nível de Manipulação:** {level}")
 st.markdown(f"- **Sinal de Alerta:** {alert_msg}")
 
-st.subheader('Previsão Próxima Jogada')
+st.subheader('Previsão da Próxima Jogada')
 st.write(f"🔴 {prediction['🔴']}% | 🔵 {prediction['🔵']}% | 🟡 {prediction['🟡']}%")
 
 st.subheader('Sugestão de Aposta')
