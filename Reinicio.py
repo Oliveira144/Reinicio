@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 
-# Mapeamento dos valores das cartas
 valores_carta = {
     "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
     "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14
@@ -23,7 +22,6 @@ def winner(row):
 def identifica_streaks(df):
     streaks = []
     streak_len = 1
-
     for i in range(1, len(df)):
         prev_winner = winner(df.iloc[i - 1])
         curr_winner = winner(df.iloc[i])
@@ -84,7 +82,6 @@ def analise_avancada(df):
     return "
 ".join(analises)
 
-# Streamlit app
 st.title("Analisador Profissional Football Studio")
 
 if 'cards_df' not in st.session_state:
