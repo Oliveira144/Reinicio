@@ -1,4 +1,4 @@
-import streamlit as st
+    import streamlit as st
 import pandas as pd
 
 # Definição dos valores das cartas
@@ -24,7 +24,6 @@ def vencedor(rodada):
 def identifica_streaks(df):
     streaks = []
     streak_len = 1
-    streak_winner = None
 
     for i in range(1, len(df)):
         prev_winner = vencedor(df.iloc[i - 1])
