@@ -86,37 +86,34 @@ def analise_avancada(df):
     return "
 ".join(analises)
 
-# Streamlit app
+# Inicialização do app Streamlit
 st.title("Analisador Profissional Football Studio")
 
-# Session state para armazenar dados
 if 'cards_df' not in st.session_state:
     st.session_state['cards_df'] = pd.DataFrame(columns=["Rodada", "Carta Home", "Carta Away"])
 
-# Inputs para o usuário
+# Entrada de dados manual
 st.header("Registrar rodada")
 rodada = st.number_input("Número da rodada", min_value=1, step=1)
 carta_home = st.selectbox("Carta Home", options=list(valores_carta.keys()))
 carta_away = st.selectbox("Carta Away", options=list(valores_carta.keys()))
 
-# Registrar rodada
 if st.button("Registrar rodada"):
     new_row = {"Rodada": rodada, "Carta Home": carta_home, "Carta Away": carta_away}
-    # Método recomendado para adicionar linha sem warning
     st.session_state['cards_df'] = pd.concat([st.session_state['cards_df'], pd.DataFrame([new_row])], ignore_index=True)
     st.success("Rodada registrada com sucesso!")
 
-# Mostrar dados
+# Exibir dados registrados
 st.header("Dados Registrados")
 st.dataframe(st.session_state['cards_df'])
 
-# Análise avançada
+# Análise e relatório
 st.header("Análise Avançada dos Padrões")
 df = st.session_state['cards_df']
 resultado_analise = analise_avancada(df)
 st.text_area(label="Resultados da Análise", value=resultado_analise, height=150)
 
-# Sugestão de aposta baseada na análise
+# Sugestão de aposta
 if len(df) >= 3:
     streaks = identifica_streaks(df)
     if streaks and streaks[-1][3] >= 3:
