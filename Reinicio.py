@@ -40,7 +40,7 @@ def identifica_streaks(df):
                     "tamanho": streak_len
                 })
             streak_len = 1
-    # Último streak
+
     if streak_len > 1:
         streaks.append({
             "início": len(df) - streak_len,
@@ -48,6 +48,7 @@ def identifica_streaks(df):
             "vencedor": vencedor(df.iloc[-1]),
             "tamanho": streak_len
         })
+
     return streaks
 
 def identificar_alternancia(df):
@@ -92,10 +93,10 @@ def analise_avancada(df):
 
     tendencias = tendencia_pos_empate(df)
     if tendencias:
-        analises.append(f"Foram observadas tendências em {len(tendencias)} rodadas após empates.")
+        analises.append(f"Foram observadas {len(tendencias)} rodadas após empates com mudança de tendência.")
 
-    return "
-".join(analises)
+    return "\n".join(analises)
+
 
 # --- STREAMLIT APP ---
 
@@ -112,11 +113,19 @@ carta_away = st.selectbox("Carta Away", options=list(VALORES_CARTA.keys()))
 
 if st.button("Adicionar rodada"):
     nova_rodada = {
-        "Rodada": rodada_num,
+        "Rodada": int(rodada_num),
         "Carta Home": carta_home,
         "Carta Away": carta_away
     }
-    st.session_state.dados = pd.concat([st.session_state.dados, pd.DataFrame([nova_rodada])], ignore_index=True)
+
+    st.session_state.dados = pd.concat(
+        [st.session_state.dados, pd.DataFrame([nova_rodada])],
+        ignore_index=True
+    )
+
+    # Ordena automaticamente pelas rodadas
+    st.session_state.dados = st.session_state.dados.sort_values("Rodada").reset_index(drop=True)
+
     st.success("Rodada adicionada com sucesso!")
 
 st.header("Histórico de Rodadas")
