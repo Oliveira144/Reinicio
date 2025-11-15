@@ -1,20 +1,22 @@
 import streamlit as st
 import pandas as pd
 
-valores_carta = {
-    "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
-    "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14
+# Definição dos valores das cartas
+VALORES_CARTA = {
+    "2": 2, "3": 3, "4": 4, "5": 5, "6": 6,
+    "7": 7, "8": 8, "9": 9, "10": 10,
+    "J": 11, "Q": 12, "K": 13, "A": 14
 }
 
 def valor_carta(carta):
-    return valores_carta.get(carta, 0)
+    return VALORES_CARTA.get(carta, 0)
 
-def winner(row):
-    home_val = valor_carta(row["Carta Home"])
-    away_val = valor_carta(row["Carta Away"])
-    if home_val > away_val:
+def vencedor(rodada):
+    home = valor_carta(rodada["Carta Home"])
+    away = valor_carta(rodada["Carta Away"])
+    if home > away:
         return "Home"
-    elif away_val > home_val:
+    elif away > home:
         return "Away"
     else:
         return "Draw"
@@ -22,94 +24,115 @@ def winner(row):
 def identifica_streaks(df):
     streaks = []
     streak_len = 1
+    streak_winner = None
+
     for i in range(1, len(df)):
-        prev_winner = winner(df.iloc[i - 1])
-        curr_winner = winner(df.iloc[i])
+        prev_winner = vencedor(df.iloc[i - 1])
+        curr_winner = vencedor(df.iloc[i])
 
         if curr_winner == prev_winner and curr_winner != "Draw":
             streak_len += 1
         else:
             if streak_len > 1:
-                streaks.append((i - streak_len, i - 1, prev_winner, streak_len))
+                streaks.append({
+                    "início": i - streak_len,
+                    "fim": i - 1,
+                    "vencedor": prev_winner,
+                    "tamanho": streak_len
+                })
             streak_len = 1
+    # Último streak
     if streak_len > 1:
-        streaks.append((len(df) - streak_len, len(df) - 1, winner(df.iloc[-1]), streak_len))
+        streaks.append({
+            "início": len(df) - streak_len,
+            "fim": len(df) - 1,
+            "vencedor": vencedor(df.iloc[-1]),
+            "tamanho": streak_len
+        })
     return streaks
 
 def identificar_alternancia(df):
     alternancias = []
     for i in range(1, len(df)):
-        if winner(df.iloc[i]) != winner(df.iloc[i - 1]):
+        if vencedor(df.iloc[i]) != vencedor(df.iloc[i - 1]):
             alternancias.append(i)
     return alternancias
 
 def identificar_empate_apos_streak(df):
-    empates_pos_streak = []
+    empates = []
     streaks = identifica_streaks(df)
-    for (start, end, vencedor, length) in streaks:
-        if end + 1 < len(df):
-            if winner(df.iloc[end + 1]) == "Draw":
-                empates_pos_streak.append(end + 1)
-    return empates_pos_streak
+    for streak in streaks:
+        pos_apos_streak = streak["fim"] + 1
+        if pos_apos_streak < len(df):
+            if vencedor(df.iloc[pos_apos_streak]) == "Draw":
+                empates.append(pos_apos_streak)
+    return empates
 
 def tendencia_pos_empate(df):
     resultados = []
     for i in range(1, len(df)):
-        if winner(df.iloc[i - 1]) == "Draw":
-            resultados.append((i, winner(df.iloc[i])))
+        if vencedor(df.iloc[i - 1]) == "Draw":
+            resultados.append((i, vencedor(df.iloc[i])))
     return resultados
 
 def analise_avancada(df):
     if len(df) < 2:
-        return "Dados insuficientes para análise"
+        return "Dados insuficientes para análise."
 
     analises = []
 
     streaks = identifica_streaks(df)
     if streaks:
-        analises.append(f"Identificados {len(streaks)} streak(s) de vitórias consecutivas.")
+        analises.append(f"Foram identificados {len(streaks)} streak(s) de vitórias consecutivas.")
 
     alternancias = identificar_alternancia(df)
-    analises.append(f"Foram identificadas {len(alternancias)} alternância(s) de vencedor.")
+    analises.append(f"Foram observadas {len(alternancias)} alternância(s) de vencedor.")
 
-    empates_pos_streak = identificar_empate_apos_streak(df)
-    analises.append(f"Empates detectados após streaks: {len(empates_pos_streak)} vezes.")
+    empates = identificar_empate_apos_streak(df)
+    analises.append(f"{len(empates)} empates ocorreram imediatamente após streaks.")
 
-    tendencia_empates = tendencia_pos_empate(df)
-    if tendencia_empates:
-        analises.append(f"Tendências observadas após empates em {len(tendencia_empates)} rodadas.")
+    tendencias = tendencia_pos_empate(df)
+    if tendencias:
+        analises.append(f"Foram observadas tendências em {len(tendencias)} rodadas após empates.")
 
     return "
 ".join(analises)
 
+# --- STREAMLIT APP ---
+
 st.title("Analisador Profissional Football Studio")
 
-if 'cards_df' not in st.session_state:
-    st.session_state['cards_df'] = pd.DataFrame(columns=["Rodada", "Carta Home", "Carta Away"])
+if "dados" not in st.session_state:
+    st.session_state.dados = pd.DataFrame(columns=["Rodada", "Carta Home", "Carta Away"])
 
-st.header("Registrar rodada")
-rodada = st.number_input("Número da rodada", min_value=1, step=1)
-carta_home = st.selectbox("Carta Home", options=list(valores_carta.keys()))
-carta_away = st.selectbox("Carta Away", options=list(valores_carta.keys()))
+st.header("Registrar nova rodada")
 
-if st.button("Registrar rodada"):
-    new_row = {"Rodada": rodada, "Carta Home": carta_home, "Carta Away": carta_away}
-    st.session_state['cards_df'] = pd.concat([st.session_state['cards_df'], pd.DataFrame([new_row])], ignore_index=True)
-    st.success("Rodada registrada com sucesso!")
+rodada_num = st.number_input("Número da rodada", min_value=1, step=1)
+carta_home = st.selectbox("Carta Home", options=list(VALORES_CARTA.keys()))
+carta_away = st.selectbox("Carta Away", options=list(VALORES_CARTA.keys()))
 
-st.header("Dados Registrados")
-st.dataframe(st.session_state['cards_df'])
+if st.button("Adicionar rodada"):
+    nova_rodada = {
+        "Rodada": rodada_num,
+        "Carta Home": carta_home,
+        "Carta Away": carta_away
+    }
+    st.session_state.dados = pd.concat([st.session_state.dados, pd.DataFrame([nova_rodada])], ignore_index=True)
+    st.success("Rodada adicionada com sucesso!")
 
-st.header("Análise Avançada dos Padrões")
-df = st.session_state['cards_df']
-resultado_analise = analise_avancada(df)
-st.text_area(label="Resultados da Análise", value=resultado_analise, height=150)
+st.header("Histórico de Rodadas")
+st.dataframe(st.session_state.dados)
 
-if len(df) >= 3:
-    streaks = identifica_streaks(df)
-    if streaks and streaks[-1][3] >= 3:
-        st.write("Recomendação: Apostar no mesmo vencedor da última sequência longa (streak).")
+st.header("Análise e Recomendações")
+
+resultado_analise = analise_avancada(st.session_state.dados)
+st.text_area("Resultado da Análise", resultado_analise, height=150)
+
+if len(st.session_state.dados) >= 3:
+    streaks = identifica_streaks(st.session_state.dados)
+    if streaks and streaks[-1]["tamanho"] >= 3:
+        st.markdown("**Recomendação:** Apostar no mesmo vencedor da última sequência longa (streak).")
     else:
-        st.write("Recomendação: Observar padrão de alternância ou empates para decidir a aposta.")
+        st.markdown("**Recomendação:** Observar alternâncias ou empates para definir sua aposta.")
 else:
-    st.write("Mais dados são necessários para sugestões precisas.")
+    st.markdown("Mais dados são necessários para gerar recomendações confiáveis.")
