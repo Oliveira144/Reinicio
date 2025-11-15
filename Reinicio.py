@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 
 # Mapeamento dos valores das cartas
-valores_carta = {"2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "10":10, "J":11, "Q":12, "K":13, "A":14}
+valores_carta = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
+                 "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14}
 
 def valor_carta(carta):
     return valores_carta.get(carta, 0)
@@ -22,23 +23,23 @@ def identifica_streaks(df):
     streak_len = 1
 
     for i in range(1, len(df)):
-        prev_winner = winner(df.iloc[i-1])
+        prev_winner = winner(df.iloc[i - 1])
         curr_winner = winner(df.iloc[i])
 
         if curr_winner == prev_winner and curr_winner != "Draw":
             streak_len += 1
         else:
             if streak_len > 1:
-                streaks.append((i-streak_len, i-1, prev_winner, streak_len))
+                streaks.append((i - streak_len, i - 1, prev_winner, streak_len))
             streak_len = 1
     if streak_len > 1:
-        streaks.append((len(df)-streak_len, len(df)-1, winner(df.iloc[-1]), streak_len))
+        streaks.append((len(df) - streak_len, len(df) - 1, winner(df.iloc[-1]), streak_len))
     return streaks
 
 def identificar_alternancia(df):
     alternancias = []
     for i in range(1, len(df)):
-        if winner(df.iloc[i]) != winner(df.iloc[i-1]):
+        if winner(df.iloc[i]) != winner(df.iloc[i - 1]):
             alternancias.append(i)
     return alternancias
 
@@ -46,15 +47,15 @@ def identificar_empate_apos_streak(df):
     empates_pos_streak = []
     streaks = identifica_streaks(df)
     for (start, end, vencedor, length) in streaks:
-        if end+1 < len(df):
-            if winner(df.iloc[end+1]) == "Draw":
-                empates_pos_streak.append(end+1)
+        if end + 1 < len(df):
+            if winner(df.iloc[end + 1]) == "Draw":
+                empates_pos_streak.append(end + 1)
     return empates_pos_streak
 
 def tendencia_pos_empate(df):
     resultados = []
     for i in range(1, len(df)):
-        if winner(df.iloc[i-1]) == "Draw":
+        if winner(df.iloc[i - 1]) == "Draw":
             resultados.append((i, winner(df.iloc[i])))
     return resultados
 
@@ -101,7 +102,8 @@ carta_away = st.selectbox("Carta Away", options=list(valores_carta.keys()))
 # Registrar rodada
 if st.button("Registrar rodada"):
     new_row = {"Rodada": rodada, "Carta Home": carta_home, "Carta Away": carta_away}
-    st.session_state['cards_df'] = st.session_state['cards_df'].append(new_row, ignore_index=True)
+    # Método recomendado para adicionar linha sem warning
+    st.session_state['cards_df'] = pd.concat([st.session_state['cards_df'], pd.DataFrame([new_row])], ignore_index=True)
     st.success("Rodada registrada com sucesso!")
 
 # Mostrar dados
