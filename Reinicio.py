@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 
 # Mapeamento dos valores das cartas
-valores_carta = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
-                 "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14}
+valores_carta = {
+    "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
+    "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14
+}
 
 def valor_carta(carta):
     return valores_carta.get(carta, 0)
@@ -65,20 +67,16 @@ def analise_avancada(df):
 
     analises = []
 
-    # Analisar streaks
     streaks = identifica_streaks(df)
     if streaks:
         analises.append(f"Identificados {len(streaks)} streak(s) de vitórias consecutivas.")
 
-    # Analisar alternâncias
     alternancias = identificar_alternancia(df)
     analises.append(f"Foram identificadas {len(alternancias)} alternância(s) de vencedor.")
 
-    # Analisar empates após streaks
     empates_pos_streak = identificar_empate_apos_streak(df)
     analises.append(f"Empates detectados após streaks: {len(empates_pos_streak)} vezes.")
 
-    # Analisar tendências após empates
     tendencia_empates = tendencia_pos_empate(df)
     if tendencia_empates:
         analises.append(f"Tendências observadas após empates em {len(tendencia_empates)} rodadas.")
@@ -86,13 +84,12 @@ def analise_avancada(df):
     return "
 ".join(analises)
 
-# Inicialização do app Streamlit
+# Streamlit app
 st.title("Analisador Profissional Football Studio")
 
 if 'cards_df' not in st.session_state:
     st.session_state['cards_df'] = pd.DataFrame(columns=["Rodada", "Carta Home", "Carta Away"])
 
-# Entrada de dados manual
 st.header("Registrar rodada")
 rodada = st.number_input("Número da rodada", min_value=1, step=1)
 carta_home = st.selectbox("Carta Home", options=list(valores_carta.keys()))
@@ -103,17 +100,14 @@ if st.button("Registrar rodada"):
     st.session_state['cards_df'] = pd.concat([st.session_state['cards_df'], pd.DataFrame([new_row])], ignore_index=True)
     st.success("Rodada registrada com sucesso!")
 
-# Exibir dados registrados
 st.header("Dados Registrados")
 st.dataframe(st.session_state['cards_df'])
 
-# Análise e relatório
 st.header("Análise Avançada dos Padrões")
 df = st.session_state['cards_df']
 resultado_analise = analise_avancada(df)
 st.text_area(label="Resultados da Análise", value=resultado_analise, height=150)
 
-# Sugestão de aposta
 if len(df) >= 3:
     streaks = identifica_streaks(df)
     if streaks and streaks[-1][3] >= 3:
